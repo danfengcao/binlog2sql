@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import pymysql, argparse
+import os, argparse
+import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.row_event import (
     WriteRowsEvent,
@@ -162,14 +163,30 @@ class Binlog2sql(object):
                                     only_tables=self.only_tables, resume_stream=True)
 
         cur = self.connection.cursor()
-        for binlogevent in stream:
-            if (stream.log_file == self.enBinFile and stream.log_pos >= self.enBinEnPos) or (stream.log_file == self.eofFile and stream.log_pos >= self.eofPos):
-                break
-            if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
-                continue
-            for row in binlogevent.rows:
-                sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk)
-                print sql
+        tmpFile = 'tmp.%s.%s.tmp' % (self.connectionSettings['host'],self.connectionSettings['port']) # to simplify code, we do not use file lock for tmpFile.
+        ftmp = open(tmpFile ,"w")
+        try:
+            for binlogevent in stream:
+                if (stream.log_file == self.enBinFile and stream.log_pos >= self.enBinEnPos) or (stream.log_file == self.eofFile and stream.log_pos >= self.eofPos):
+                    break
+                if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
+                    continue
+                for row in binlogevent.rows:
+                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk)
+                    if self.flashback:
+                        ftmp.write(sql + '\n')
+                    else:
+                        print sql
+
+            if self.flashback:
+                # doesn't work if you can't fit the whole file in memory.
+                # need to be optimized
+                for line in reversed(open(tmpFile).readlines()):
+                    print line.rstrip()
+
+        finally:
+            ftmp.close()
+            os.remove(tmpFile)
 
         cur.close()
         stream.close()
