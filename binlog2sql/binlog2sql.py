@@ -24,20 +24,20 @@ def command_line_parser():
     connect_setting.add_argument('-P', '--port', dest='port', type=int,
                                  help='MySQL port to use', default=3306)
     position = parser.add_argument_group('position filter')
-    position.add_argument('--stBinFile', dest='stBinFile', type=str, required=True,
+    position.add_argument('--start-file', dest='startFile', type=str, required=True,
                           help='Start binlog file to be parsed')
-    position.add_argument('--stBinStPos', dest='stBinStPos', type=int,
+    position.add_argument('--start-pos', dest='startPos', type=int,
                           help='start position of start binlog file', default=4)
-    position.add_argument('--enBinFile', dest='enBinFile', type=str,
+    position.add_argument('--end-file', dest='endFile', type=str,
                           help='End binlog file to be parsed', default='')
-    position.add_argument('--enBinEnPos', dest='enBinEnPos', type=int,
+    position.add_argument('--end-pos', dest='endPos', type=int,
                           help='stop position of end binlog file', default=4)
 
     schema = parser.add_argument_group('schema filter')
     schema.add_argument('-d', '--databases', dest='databases', type=str, nargs='*',
-                        help='db you want to process', default='')
+                        help='dbs you want to process', default='')
     schema.add_argument('-t', '--tables', dest='tables', type=str, nargs='*',
-                        help='table you want to process', default='')
+                        help='tables you want to process', default='')
 
     exclusive = parser.add_mutually_exclusive_group()
     exclusive.add_argument('--popPk', dest='popPk', action='store_true',
@@ -114,18 +114,18 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row , flashback=False, popP
 
 class Binlog2sql(object):
 
-    def __init__(self, connectionSettings, stBinFile=None, stBinStPos=None, enBinFile=None,
-                 enBinEnPos=None, only_schemas=[], only_tables=[], popPk=False, flashback=False):
+    def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None,
+                 endPos=None, only_schemas=[], only_tables=[], popPk=False, flashback=False):
         '''
         connectionSettings: {'host': 127.0.0.1, 'port': 3306, 'user': slave, 'passwd': slave}
         '''
         self.connectionSettings = connectionSettings
-        self.stBinFile = stBinFile
-        self.stBinStPos = stBinStPos
-        if not stBinFile:
-            raise ValueError('lack of parameter,stBinFile.')
-        if not stBinStPos:
-            self.stBinFile = 4
+        self.startFile = startFile
+        self.startPos = startPos
+        if not startFile:
+            raise ValueError('lack of parameter,startFile.')
+        if not startPos:
+            self.startFile = 4
 
         self.only_schemas = only_schemas if only_schemas else None
         self.only_tables = only_tables if only_tables else None
@@ -138,16 +138,16 @@ class Binlog2sql(object):
             cur = self.connection.cursor()
             cur.execute("SHOW MASTER STATUS")
             self.eofFile, self.eofPos = cur.fetchone()[:2]
-            if enBinFile and enBinEnPos:
-                self.enBinFile, self.enBinEnPos = (enBinFile, enBinEnPos)
+            if endFile and endPos:
+                self.endFile, self.endPos = (endFile, endPos)
             else:
-                self.enBinFile, self.enBinEnPos = (self.eofFile, self.eofPos)
+                self.endFile, self.endPos = (self.eofFile, self.eofPos)
 
             cur.execute("SHOW MASTER LOGS")
             binIndex = [row[0] for row in cur.fetchall()]
             binlog2i = lambda x: x.split('.')[1]
             for bin in binIndex:
-                if binlog2i(bin) >= binlog2i(self.stBinFile) and binlog2i(bin) <= binlog2i(self.enBinFile):
+                if binlog2i(bin) >= binlog2i(self.startFile) and binlog2i(bin) <= binlog2i(self.endFile):
                     self.binlogList.append(bin)
 
             cur.execute("SELECT @@server_id")
@@ -159,7 +159,7 @@ class Binlog2sql(object):
 
     def process_binlog(self):
         stream = BinLogStreamReader(connection_settings=self.connectionSettings, server_id=self.serverId,
-                                    log_file=self.stBinFile, log_pos=self.stBinStPos, only_schemas=self.only_schemas,
+                                    log_file=self.startFile, log_pos=self.startPos, only_schemas=self.only_schemas,
                                     only_tables=self.only_tables, resume_stream=True)
 
         cur = self.connection.cursor()
@@ -167,7 +167,7 @@ class Binlog2sql(object):
         ftmp = open(tmpFile ,"w")
         try:
             for binlogevent in stream:
-                if (stream.log_file == self.enBinFile and stream.log_pos >= self.enBinEnPos) or (stream.log_file == self.eofFile and stream.log_pos >= self.eofPos):
+                if (stream.log_file == self.endFile and stream.log_pos >= self.endPos) or (stream.log_file == self.eofFile and stream.log_pos >= self.eofPos):
                     break
                 if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
                     continue
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     parser = command_line_parser()
     args = parser.parse_args()
     connectionSettings = {'host':args.host, 'port':args.port, 'user':args.user, 'passwd':args.password}
-    binlog2sql = Binlog2sql(connectionSettings=connectionSettings, stBinFile=args.stBinFile,
-                            stBinStPos=args.stBinStPos, enBinFile=args.enBinFile, enBinEnPos=args.enBinEnPos,
+    binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
+                            startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,
                             only_schemas=args.databases, only_tables=args.tables, popPk=args.popPk, flashback=args.flashback)
     binlog2sql.process_binlog()
