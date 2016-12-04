@@ -28,21 +28,21 @@ pip install -r requirements.txt
 * 解析出标准SQL
 
 ```bash
-python binlog2sql.py --host='127.0.0.1' -P3306 -uadmin -p'admin' --stBinFile='mysql-bin.000002'
+python binlog2sql.py --host='127.0.0.1' -P3306 -uadmin -p'admin' --start-file='mysql-bin.000002'
 ```
 
 * 解析出回滚SQL
 
 ```bash
-python binlog2sql.py --flashback --host='127.0.0.1' -P3306 -uadmin -p'admin' --stBinFile='mysql-bin.000002' --stBinStPos=1240 --enBinFile='mysql-bin.000004' --enBinEnPos=9620
+python binlog2sql.py --flashback --host='127.0.0.1' -P3306 -uadmin -p'admin' --start-file='mysql-bin.000002' --start-pos=1240 --end-file='mysql-bin.000004' --end-pos=9620
 ```
 * 主从切换后数据不一致的修复
 
 ```bash
 1. 取出老master额外的事务；
-    python binlog2sql.py --popPk --host='10.1.1.1' -P3306 -uadmin -p'admin' --stBinFile='mysql-bin.000002' --stBinStPos=1240 > oldMaster.sql
+    python binlog2sql.py --popPk --host='10.1.1.1' -P3306 -uadmin -p'admin' --start-file='mysql-bin.000002' --start-pos=1240 > oldMaster.sql
 2. 回滚老master额外的事务；
-    python binlog2sql.py --flashback --host='10.1.1.1' -P3306 -uadmin -p'admin' --stBinFile='mysql-bin.000002' --stBinStPos=1240 | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
+    python binlog2sql.py --flashback --host='10.1.1.1' -P3306 -uadmin -p'admin' --start-file='mysql-bin.000002' --start-pos=1240 | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
 3. 在新master重新执行事务；
     mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
 ```
