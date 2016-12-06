@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, argparse
+import os, sys, argparse
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.row_event import (
@@ -14,9 +14,9 @@ from pymysqlreplication.event import QueryEvent
 def command_line_parser():
     """Returns a command line parser used for binlog2sql"""
 
-    parser = argparse.ArgumentParser(description='Parse MySQL binlog to SQL you want')
+    parser = argparse.ArgumentParser(description='Parse MySQL binlog to SQL you want', add_help=False)
     connect_setting = parser.add_argument_group('connect setting')
-    connect_setting.add_argument('--host', dest='host', type=str,
+    connect_setting.add_argument('-h','--host', dest='host', type=str,
                                  help='Host the MySQL database server located', default='127.0.0.1')
     connect_setting.add_argument('-u', '--user', dest='user', type=str,
                                  help='MySQL Username to log in as', default='root')
@@ -24,17 +24,19 @@ def command_line_parser():
                                  help='MySQL Password to use', default='')
     connect_setting.add_argument('-P', '--port', dest='port', type=int,
                                  help='MySQL port to use', default=3306)
-    position = parser.add_argument_group('position filter')
-    position.add_argument('--start-file', dest='startFile', type=str, required=True,
-                          help='Start binlog file to be parsed')
-    position.add_argument('--start-pos', dest='startPos', type=int,
-                          help='start position of start binlog file', default=4)
-    position.add_argument('--end-file', dest='endFile', type=str,
-                          help="End binlog file to be parsed. default: '--start-file'", default='')
-    position.add_argument('--end-pos', dest='endPos', type=int,
-                          help="stop position of end binlog file. default: end position of '--end-file'", default=0)
+    range = parser.add_argument_group('range filter')
+    range.add_argument('--start-file', dest='startFile', type=str,
+                       help='Start binlog file to be parsed')
+    range.add_argument('--start-pos', dest='startPos', type=int,
+                       help='start position of start binlog file', default=4)
+    range.add_argument('--end-file', dest='endFile', type=str,
+                       help="End binlog file to be parsed. default: '--start-file'", default='')
+    range.add_argument('--end-pos', dest='endPos', type=int,
+                       help="stop position of end binlog file. default: end position of '--end-file'", default=0)
     parser.add_argument('--realtime', dest='realtime', action='store_true',
                         help='continuously replicate binlog. default: stop replicate when meeting the latest binlog when you run the program', default=False)
+
+    parser.add_argument('--help', dest='help', action='store_true', help='help infomation', default=False)
 
     schema = parser.add_argument_group('schema filter')
     schema.add_argument('-d', '--databases', dest='databases', type=str, nargs='*',
@@ -49,8 +51,21 @@ def command_line_parser():
                            help='Flashback data to start_postition of start_file', default=False)
     return parser
 
+def command_line_args():
+    parser = command_line_parser()
+    args = parser.parse_args()
+    if args.help:
+        parser.print_help()
+        sys.exit(1)
+    if args.flashback and args.realtime:
+        raise ValueError('only one of flashback or realtime can be True')
+    if args.flashback and args.popPk:
+        raise ValueError('only one of flashback or popPk can be True')
+    return args
+
 
 def compare_items((k, v)):
+    #caution: if v is NULL, may need to process
     return '`%s`=%%s'%k
 
 def fix_object(value):
@@ -64,7 +79,7 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
     if flashback and popPk:
         raise ValueError('only one of flashback or popPk can be True')
     if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent, QueryEvent):
-        raise ValueError('binlogevent must be WriteRowsEvent, UpdateRowsEvent or DeleteRowsEvent')
+        raise ValueError('binlogevent must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
     sql = ''
     if flashback is True:
@@ -112,7 +127,7 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
                 ' AND '.join(map(compare_items, row['before_values'].items()))
             )
             sql = cursor.mogrify(template, map(fix_object, row['after_values'].values()+row['before_values'].values()))
-        elif isinstance(binlogevent, QueryEvent):
+        elif isinstance(binlogevent, QueryEvent) and binlogevent.query != 'BEGIN' and binlogevent.query != 'COMMIT':
             sql ='USE {0};\n{1};'.format(
                 binlogevent.schema, fix_object(binlogevent.query)
             )
@@ -189,10 +204,9 @@ class Binlog2sql(object):
                         raise ValueError('unknown binlog file or position')
 
                 if isinstance(binlogevent, QueryEvent):
-                    if binlogevent.query != 'BEGIN' and binlogevent.query != 'COMMIT':
-                        sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, flashback=self.flashback, popPk=self.popPk)
-                        if sql:
-                            print sql
+                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, popPk=self.popPk)
+                    if sql:
+                        print sql
                 elif type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
                     for row in binlogevent.rows:
                         sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk)
@@ -221,8 +235,7 @@ class Binlog2sql(object):
 
 if __name__ == '__main__':
 
-    parser = command_line_parser()
-    args = parser.parse_args()
+    args = command_line_args()
     connectionSettings = {'host':args.host, 'port':args.port, 'user':args.user, 'passwd':args.password}
     binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
                             startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,

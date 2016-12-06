@@ -7,7 +7,7 @@ MySQL主从切换后如何进行数据修复
 
 old master(10.1.1.1:3306)有一部分binlog(unreplicated binlog)未同步到new master(10.1.1.2:3306)，切换完成后new master开始有新数据进入。
 
-![](./master-slave-inconsistency.jpg)
+![](./static/master-slave-inconsistency.jpg)
 
 ### 笨办法1
 直接将old master连接new master，开启同步。此时一般会报错duplicate entry for key 'primary'。此时可选择， 
