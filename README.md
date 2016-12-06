@@ -60,9 +60,9 @@ python binlog2sql.py --flashback --host='127.0.0.1' -P3306 -uadmin -p'admin' --s
     max_binlog_size  = 1000M
     binlog-format    = row
 
-#### 如果使用flashback模式，一次性处理的binlog不宜过大，不能超过内存大小。
+#### 如果使用flashback模式，一次性处理的binlog不宜过大，不能超过内存大小。恢复操作有风险，请在备库操作或是在经验丰富的同学指导下进行。
 
-#### 目前只支持INSERT，UPDATE，DELETE的解析，暂不支持DDL解析。
+#### flashback模式只用于恢复DML语句引起的误操作，不支持DDL语句。
 
 
 
