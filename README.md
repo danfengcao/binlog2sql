@@ -94,6 +94,10 @@ $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
 * binlog格式必须是行模式
 * flashback模式只支持DML，DDL将不做输出
 * flashback模式，一次性处理的binlog不宜过大，不能超过内存大小(有待优化)
+* 目前已测试环境
+    * Python 2.7
+    * MySQL 5.6
+  
 
 ###联系我
 有任何问题，请与我联系 [danfengcao.info@gmail.com](danfengcao.info@gmail.com)
