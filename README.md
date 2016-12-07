@@ -97,7 +97,11 @@ $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
 * 目前已测试环境
     * Python 2.7
     * MySQL 5.6
-  
+
+###与mysqlbinlog比较
+* 纯Python开发，安装与使用都很简单
+* 自带flashback，popPk解析模式，无需再装补丁
+* 代码容易改造，可以支持更多个性化解析
 
 ###联系我
 有任何问题，请与我联系 [danfengcao.info@gmail.com](danfengcao.info@gmail.com)
