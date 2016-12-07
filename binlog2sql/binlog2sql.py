@@ -137,7 +137,7 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
 class Binlog2sql(object):
 
     def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None,
-                 endPos=None, only_schemas=[], only_tables=[], popPk=False, flashback=False, realtime=False):
+                 endPos=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, realtime=False):
         '''
         connectionSettings: {'host': 127.0.0.1, 'port': 3306, 'user': slave, 'passwd': slave}
         '''
