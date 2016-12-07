@@ -25,10 +25,10 @@ pip install -r requirements.txt
 ### MySQL server必须设置以下参数:
 
     [mysqld]
-    server-id		 = 1
-    log_bin		 = /var/log/mysql/mysql-bin.log
-    max_binlog_size  = 1000M
-    binlog-format    = row
+    server-id = 1
+    log_bin = /var/log/mysql/mysql-bin.log
+    max_binlog_size = 1000M
+    binlog-format = row
 
 ###基本用法
 
@@ -90,17 +90,22 @@ DELETE FROM d WHERE `did`=18 AND `updateTime`='2016-12-07 14:01:14' AND `uid`=4 
 **主从切换后数据不一致的修复**，详细描述可参见[example/FixOldMasterExtraData.md](./example/FixOldMasterExtraData.md)
 
 1. 提取old master未同步的数据，并对其中的insert语句去除主键（为了防止步骤3中出现主键冲突）
-```
-$ python binlog2sql.py --popPk -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' > oldMaster.sql
-```
+
+    ```
+    $ python binlog2sql.py --popPk -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' > oldMaster.sql
+    ```
+
 2. 将old master回滚，开启同步。同步正常；
-```
-$ python binlog2sql.py --flashback -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
-```
+
+    ```
+    $ python binlog2sql.py --flashback -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
+    ```
+
 3. 在new master重新导入改造后的sql；
-```
-$ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
-```
+
+    ```
+    $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
+    ```
 
 ###限制
 * mysql server必须开启，离线模式下不能解析binlog
