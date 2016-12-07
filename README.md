@@ -1,8 +1,6 @@
 binlog2sql
 ========================
 
-Parse MySQL binlog to SQL you want.
-
 从MySQL binlog生成各类SQL。根据不同设置，你可以得到原始SQL、回滚SQL、去除主键的INSERT SQL等。
 
 用途
@@ -37,13 +35,13 @@ pip install -r requirements.txt
 **解析出标准SQL**
 
 ```bash
-python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t tbl1 tbl2 --start-file='mysql-bin.000002'
+python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002'
 ```
 
 **解析出回滚SQL**
 
 ```bash
-python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t tbl1 tbl2 --start-file='mysql-bin.000002' --start-pos=1240 --end-file='mysql-bin.000004' --end-pos=9620
+python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002' --start-pos=1240 --end-file='mysql-bin.000004' --end-pos=9620
 ```
 ###选项
 **mysql连接配置**
@@ -96,6 +94,10 @@ $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
 * binlog格式必须是行模式
 * flashback模式只支持DML，DDL将不做输出
 * flashback模式，一次性处理的binlog不宜过大，不能超过内存大小(有待优化)
+
+###联系我
+有任何问题，请与我联系 [danfengcao.info@gmail.com](danfengcao.info@gmail.com)
+
 
 
 参考资料
