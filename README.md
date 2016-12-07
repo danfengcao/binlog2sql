@@ -1,7 +1,7 @@
 binlog2sql
 ========================
 
-从MySQL binlog生成各类SQL。根据不同设置，你可以得到原始SQL、回滚SQL、去除主键的INSERT SQL等。
+从MySQL binlog得到你要的SQL。根据不同设置，你可以得到原始SQL、回滚SQL、去除主键的INSERT SQL等。
 
 用途
 ===========
@@ -35,13 +35,26 @@ pip install -r requirements.txt
 **解析出标准SQL**
 
 ```bash
-python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002'
+$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002' --start-pos=1240
+
+输出：
+INSERT INTO d(`did`, `updateTime`, `uid`) VALUES (18, '2016-12-07 14:01:14', 4);
+INSERT INTO c(`id`, `name`) VALUES (0, 'b');
+UPDATE d SET `did`=17, `updateTime`='2016-12-07 14:01:14', `uid`=4 WHERE `did`=18 AND `updateTime`='2016-12-07 14:01:14' AND `uid`=4 LIMIT 1;
+DELETE FROM c WHERE `id`=0 AND `name`='b' LIMIT 1;
+
 ```
 
 **解析出回滚SQL**
 
 ```bash
-python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002' --start-pos=1240 --end-file='mysql-bin.000004' --end-pos=9620
+python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -d dbname -t table1 table2 --start-file='mysql-bin.000002' --start-pos=1240
+
+输出：
+INSERT INTO c(`id`, `name`) VALUES (0, 'b');
+UPDATE d SET `did`=18, `updateTime`='2016-12-07 14:01:14', `uid`=4 WHERE `did`=17 AND `updateTime`='2016-12-07 14:01:14' AND `uid`=4 LIMIT 1;
+DELETE FROM c WHERE `id`=0 AND `name`='b' LIMIT 1;
+DELETE FROM d WHERE `did`=18 AND `updateTime`='2016-12-07 14:01:14' AND `uid`=4 LIMIT 1;
 ```
 ###选项
 **mysql连接配置**
@@ -98,9 +111,10 @@ $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
     * Python 2.7
     * MySQL 5.6
 
-###与mysqlbinlog比较
+###优点（对比mysqlbinlog）
 * 纯Python开发，安装与使用都很简单
-* 自带flashback，popPk解析模式，无需再装补丁
+* 自带flashback、popPk解析模式，无需再装补丁
+* 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
 
 ###联系我
