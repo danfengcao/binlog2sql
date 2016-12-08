@@ -57,7 +57,7 @@ $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
 如果表的主键id是有业务含义的，则务必与业务方确认可行后再操作。
 
 
-###参考文献
+###参考资料
 [1] 易固武, [MySQL数据库的高可用性分析](https://www.qcloud.com/community/article/203)
 
-[2] 曹单锋, [Parse MySQL binlog to SQL you want](https://github.com/danfengcao/binlog2sql)
+[2] danfengcao, [binlog2sql: Parse MySQL binlog to SQL you want](https://github.com/danfengcao/binlog2sql)

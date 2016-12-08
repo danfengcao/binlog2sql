@@ -9,7 +9,7 @@ from pymysqlreplication.row_event import (
     UpdateRowsEvent,
     DeleteRowsEvent,
 )
-from pymysqlreplication.event import QueryEvent
+from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
 
 def command_line_parser():
     """Returns a command line parser used for binlog2sql"""
@@ -33,8 +33,8 @@ def command_line_parser():
                        help="End binlog file to be parsed. default: '--start-file'", default='')
     range.add_argument('--end-pos', dest='endPos', type=int,
                        help="stop position of end binlog file. default: end position of '--end-file'", default=0)
-    parser.add_argument('--realtime', dest='realtime', action='store_true',
-                        help='continuously replicate binlog. default: stop replicate when meeting the latest binlog when you run the program', default=False)
+    parser.add_argument('--stop-never', dest='stopnever', action='store_true',
+                        help='Wait for more data from the server. default: stop replicate at the last binlog when you start binlog2sql', default=False)
 
     parser.add_argument('--help', dest='help', action='store_true', help='help infomation', default=False)
 
@@ -57,8 +57,8 @@ def command_line_args():
     if args.help:
         parser.print_help()
         sys.exit(1)
-    if args.flashback and args.realtime:
-        raise ValueError('only one of flashback or realtime can be True')
+    if args.flashback and args.stopnever:
+        raise ValueError('only one of flashback or stop-never can be True')
     if args.flashback and args.popPk:
         raise ValueError('only one of flashback or popPk can be True')
     return args
@@ -75,7 +75,7 @@ def fix_object(value):
     else:
         return value
 
-def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, popPk=False):
+def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, flashback=False, popPk=False):
     if flashback and popPk:
         raise ValueError('only one of flashback or popPk can be True')
     if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent, QueryEvent):
@@ -84,21 +84,21 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
     sql = ''
     if flashback is True:
         if isinstance(binlogevent, WriteRowsEvent):
-            template = 'DELETE FROM {0} WHERE {1} LIMIT 1;'.format(
-                binlogevent.table,
+            template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
+                binlogevent.schema, binlogevent.table,
                 ' AND '.join(map(compare_items, row['values'].items()))
             )
             sql = cursor.mogrify(template, map(fix_object, row['values'].values()))
         elif isinstance(binlogevent, DeleteRowsEvent):
-            template = 'INSERT INTO {0}({1}) VALUES ({2});'.format(
-                binlogevent.table,
+            template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                binlogevent.schema, binlogevent.table,
                 ', '.join(map(lambda k: '`%s`'%k, row['values'].keys())),
                 ', '.join(['%s'] * len(row['values']))
             )
             sql = cursor.mogrify(template, map(fix_object, row['values'].values()))
         elif isinstance(binlogevent, UpdateRowsEvent):
-            template = 'UPDATE {0} SET {1} WHERE {2} LIMIT 1;'.format(
-                binlogevent.table,
+            template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
+                binlogevent.schema, binlogevent.table,
                 ', '.join(['`%s`=%%s'%k for k in row['before_values'].keys()]),
                 ' AND '.join(map(compare_items, row['after_values'].items())))
             sql = cursor.mogrify(template, map(fix_object, row['before_values'].values()+row['after_values'].values()))
@@ -108,21 +108,21 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
                 tableInfo = (binlogevent.table_map)[binlogevent.table_id]
                 if tableInfo.primary_key:
                     row['values'].pop(tableInfo.primary_key)
-            template = 'INSERT INTO {0}({1}) VALUES ({2});'.format(
-                binlogevent.table,
+            template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
+                binlogevent.schema, binlogevent.table,
                 ', '.join(map(lambda k: '`%s`'%k, row['values'].keys())),
                 ', '.join(['%s'] * len(row['values']))
             )
             sql = cursor.mogrify(template, map(fix_object, row['values'].values()))
         elif isinstance(binlogevent, DeleteRowsEvent):
-            template ='DELETE FROM {0} WHERE {1} LIMIT 1;'.format(
-                binlogevent.table,
+            template ='DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
+                binlogevent.schema, binlogevent.table,
                 ' AND '.join(map(compare_items, row['values'].items()))
             )
             sql = cursor.mogrify(template, map(fix_object, row['values'].values()))
         elif isinstance(binlogevent, UpdateRowsEvent):
-            template = 'UPDATE {0} SET {1} WHERE {2} LIMIT 1;'.format(
-                binlogevent.table,
+            template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
+                binlogevent.schema, binlogevent.table,
                 ', '.join(['`%s`=%%s'%k for k in row['after_values'].keys()]),
                 ' AND '.join(map(compare_items, row['before_values'].items()))
             )
@@ -131,13 +131,15 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, flashback=False, 
             sql ='USE {0};\n{1};'.format(
                 binlogevent.schema, fix_object(binlogevent.query)
             )
+    if type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
+        sql += ' #start %s end %s' % (eStartPos, binlogevent.packet.log_pos)
     return sql
 
 
 class Binlog2sql(object):
 
     def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None,
-                 endPos=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, realtime=False):
+                 endPos=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, stopnever=False):
         '''
         connectionSettings: {'host': 127.0.0.1, 'port': 3306, 'user': slave, 'passwd': slave}
         '''
@@ -154,7 +156,7 @@ class Binlog2sql(object):
         self.only_tables = only_tables if only_tables else None
         self.popPk = popPk
         self.flashback = flashback
-        self.realtime = realtime
+        self.stopnever = stopnever
 
         self.binlogList = []
         self.connection = pymysql.connect(**self.connectionSettings)
@@ -190,31 +192,37 @@ class Binlog2sql(object):
         tmpFile = 'tmp.%s.%s.tmp' % (self.connectionSettings['host'],self.connectionSettings['port']) # to simplify code, we do not use file lock for tmpFile.
         ftmp = open(tmpFile ,"w")
         flagLastEvent = False
+        eStartPos = stream.log_pos
+        lastPos = stream.log_pos
         try:
             for binlogevent in stream:
-                if not self.realtime:
+                if not self.stopnever:
                     if (stream.log_file == self.endFile and stream.log_pos == self.endPos) or (stream.log_file == self.eofFile and stream.log_pos == self.eofPos):
                         flagLastEvent = True
-                    elif not self.endPos:
-                        if stream.log_file not in self.binlogList:
-                            break
-                    elif (stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos):
+                    elif stream.log_file not in self.binlogList:
                         break
-                    else:
-                        raise ValueError('unknown binlog file or position')
+                    elif (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos):
+                        break
+                    # else:
+                    #     raise ValueError('unknown binlog file or position')
+
+                if isinstance(binlogevent, QueryEvent) and binlogevent.query == 'BEGIN':
+                    eStartPos = lastPos
 
                 if isinstance(binlogevent, QueryEvent):
-                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, popPk=self.popPk)
+                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, flashback=self.flashback, popPk=self.popPk)
                     if sql:
                         print sql
                 elif type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
                     for row in binlogevent.rows:
-                        sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk)
+                        sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk, eStartPos=eStartPos)
                         if self.flashback:
                             ftmp.write(sql + '\n')
                         else:
                             print sql
 
+                if type(binlogevent) not in (RotateEvent, FormatDescriptionEvent):
+                    lastPos = binlogevent.packet.log_pos
                 if flagLastEvent:
                     break
             ftmp.close()
@@ -239,5 +247,5 @@ if __name__ == '__main__':
     connectionSettings = {'host':args.host, 'port':args.port, 'user':args.user, 'passwd':args.password}
     binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
                             startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,
-                            only_schemas=args.databases, only_tables=args.tables, popPk=args.popPk, flashback=args.flashback, realtime=args.realtime)
+                            only_schemas=args.databases, only_tables=args.tables, popPk=args.popPk, flashback=args.flashback, stopnever=args.stopnever)
     binlog2sql.process_binlog()
