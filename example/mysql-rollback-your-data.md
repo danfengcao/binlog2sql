@@ -23,80 +23,79 @@ pip install -r requirements.txt
 
 然后，我们就可以生成回滚SQL了。
 
-**背景**：误删了test库f表整张表的数据，需要紧急回滚。
+**背景**：误删了test库tbl表整张表的数据，需要紧急回滚。
 
 ```bash
-原有数据
-mysql> select * from f;
-+-----+-----+---------------------+
-| uid | did | updateTime          |
-+-----+-----+---------------------+
-|   1 |  18 | 2016-12-06 12:28:18 |
-|   2 |  19 | 2016-12-06 12:55:56 |
-|   3 |  20 | 2016-12-07 14:00:58 |
-|   4 |  21 | 2016-12-07 14:01:00 |
-+-----+-----+---------------------+
+test库tbl表原有数据
+mysql> select * from tbl;
++----+--------+---------------------+
+| id | name   | addtime             |
++----+--------+---------------------+
+|  1 | 小赵   | 2016-12-10 00:04:33 |
+|  2 | 小钱   | 2016-12-10 00:04:48 |
+|  3 | 小孙   | 2016-12-10 00:04:51 |
+|  4 | 小李   | 2016-12-10 00:04:56 |
++----+--------+---------------------+
+4 rows in set (0.00 sec)
 
-误操作
-mysql> delete from f;
+mysql> delete from tbl;
 Query OK, 4 rows affected (0.00 sec)
 
-f表被清空
-mysql> select * from f;
+tbl表被清空
+mysql> select * from tbl;
 Empty set (0.00 sec)
 ```
 
-**回滚步骤**：
+**恢复数据步骤**：
 
 1. 登录mysql，查看目前的binlog文件
 
 	```bash
-	mysql> show master logs;
-	+------------------+-----------+
-	| Log_name         | File_size |
-	+------------------+-----------+
-	| mysql-bin.000001 |  12262268 |
-	| mysql-bin.000002 |    132776 |
-	+------------------+-----------+
+mysql> show master logs;
++------------------+-----------+
+| Log_name         | File_size |
++------------------+-----------+
+| mysql-bin.000046 |  12262268 |
+| mysql-bin.000047 |      3583 |
++------------------+-----------+
 	```
 
-2. 最新的binlog文件是mysql-bin.000002，我们再定位误操作SQL的binlog位置
+2. 最新的binlog文件是mysql-bin.000047，我们再定位误操作SQL的binlog位置
 
 	```bash
-	$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t f --start-file='mysql-bin.000002'
-
-	输出：
-	DELETE FROM `test`.`f` WHERE `did`=18 AND `updateTime`='2016-12-06 12:28:18' AND `uid`=1 LIMIT 1; #start 4 end 314
-	DELETE FROM `test`.`f` WHERE `did`=19 AND `updateTime`='2016-12-06 12:55:56' AND `uid`=2 LIMIT 1; #start 4 end 314
-	DELETE FROM `test`.`f` WHERE `did`=20 AND `updateTime`='2016-12-07 14:00:58' AND `uid`=3 LIMIT 1; #start 4 end 314
-	DELETE FROM `test`.`f` WHERE `did`=21 AND `updateTime`='2016-12-07 14:01:00' AND `uid`=4 LIMIT 1; #start 4 end 314
+$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047'
+输出：
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:51' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:56' AND `id`=4 AND `name`='小李' LIMIT 1; #start 3346 end 3556
 	```
-2. 生成回滚sql，并检查回滚sql是否正确
+        
+3. 生成回滚sql，并检查回滚sql是否正确
 
 	```bash
-	$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t f --start-file='mysql-bin.000002' --start-pos=4 --end-pos=314 -B
-
-	输出：
-	INSERT INTO `test`.`f`(`did`, `updateTime`, `uid`) VALUES (21, '2016-12-07 14:01:00', 4); #start 4 end 314
-	INSERT INTO `test`.`f`(`did`, `updateTime`, `uid`) VALUES (20, '2016-12-07 14:00:58', 3); #start 4 end 314
-INSERT INTO `test`.`f`(`did`, `updateTime`, `uid`) VALUES (19, '2016-12-06 12:55:56', 2); #start 4 end 314
-	INSERT INTO `test`.`f`(`did`, `updateTime`, `uid`) VALUES (18, '2016-12-06 12:28:18', 1); #start 4 end 314
+$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B
+输出：
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:56', 4, '小李'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:51', 3, '小孙'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 3346 end 3556
 	```
-3. 确认回滚sql正确，执行回滚语句。登录mysql，数据回滚成功。
+        
+4. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
 	```bash
-	$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t f --start-file='mysql-bin.000002' --start-pos=4 --end-pos=314 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
+$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
 
-	mysql> select * from f;
-+-----+-----+---------------------+
-| uid | did | updateTime          |
-+-----+-----+---------------------+
-|   1 |  18 | 2016-12-06 12:28:18 |
-|   2 |  19 | 2016-12-06 12:55:56 |
-|   3 |  20 | 2016-12-07 14:00:58 |
-|   4 |  21 | 2016-12-07 14:01:00 |
-+-----+-----+---------------------+
-	
+mysql> select * from tbl;
++----+--------+---------------------+
+| id | name   | addtime             |
++----+--------+---------------------+
+|  1 | 小赵   | 2016-12-10 00:04:33 |
+|  2 | 小钱   | 2016-12-10 00:04:48 |
+|  3 | 小孙   | 2016-12-10 00:04:51 |
+|  4 | 小李   | 2016-12-10 00:04:56 |
++----+--------+---------------------+
 	```
 
 至此，不用再担心被炒鱿鱼了。

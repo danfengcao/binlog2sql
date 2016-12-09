@@ -1,7 +1,7 @@
 binlog2sql
 ========================
 
-从MySQL binlog得到你要的SQL。根据不同设置，你可以得到原始SQL、回滚SQL、去除主键的INSERT SQL等。
+从MySQL binlog解析出你要的SQL。根据不同选项，你可以得到原始SQL、回滚SQL、去除主键的INSERT SQL等。
 
 用途
 ===========
@@ -9,6 +9,15 @@ binlog2sql
 * 数据回滚
 * 主从切换后数据不一致的修复
 * 从binlog生成标准SQL，带来的衍生功能
+
+
+项目状态
+===
+正常维护
+
+* 已测试环境
+    * Python 2.6, 2.7
+    * MySQL 5.6
 
 
 安装
@@ -83,71 +92,87 @@ DELETE FROM `test`.`test4` WHERE `data`='World' AND `id`=1 AND `data2`='Hello' L
 
 ###应用案例
 
-#### **案例一 跑错SQL，需要紧急回滚**
+#### **误删整张表数据，需要紧急回滚**
 
 详细描述可参见[example/mysql-rollback-your-data.md](./example/mysql-rollback-your-data.md)
 
-**背景**：误删test库c表的数据，需要紧急回滚。
+```bash
+test库tbl表原有数据
+mysql> select * from tbl;
++----+--------+---------------------+
+| id | name   | addtime             |
++----+--------+---------------------+
+|  1 | 小赵   | 2016-12-10 00:04:33 |
+|  2 | 小钱   | 2016-12-10 00:04:48 |
+|  3 | 小孙   | 2016-12-10 00:04:51 |
+|  4 | 小李   | 2016-12-10 00:04:56 |
++----+--------+---------------------+
+4 rows in set (0.00 sec)
 
-**步骤**：
+mysql> delete from tbl;
+Query OK, 4 rows affected (0.00 sec)
 
-1. 定位误操作的SQL位置
+tbl表被清空
+mysql> select * from tbl;
+Empty set (0.00 sec)
+```
+
+**恢复数据步骤**：
+
+1. 登录mysql，查看目前的binlog文件
 
 	```bash
-	$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t c --start-file='mysql-bin.000002'
+mysql> show master logs;
++------------------+-----------+
+| Log_name         | File_size |
++------------------+-----------+
+| mysql-bin.000046 |  12262268 |
+| mysql-bin.000047 |      3583 |
++------------------+-----------+
+```
 
-	输出：
-	INSERT INTO `test`.`c`(`id`, `name`) VALUES (0, 'b'); #start 310 end 459
-	DELETE FROM `test`.`c` WHERE `id`=0 AND `name`='b' LIMIT 1; #start 682 end 831
-	UPDATE `test`.`c` SET `id`=3, `name`='b' WHERE `id`=3 AND `name`='a' LIMIT 1; #start 858 end 1015
-	```
-2. 查看回滚sql是否正确
-
-	```bash
-	$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t c --start-file='mysql-bin.000002' --start-pos=682 --end-pos=831 -B
-
-	输出：
-	INSERT INTO `test`.`c`(`id`, `name`) VALUES (0, 'b'); #start 682 end 831
-	```
-3. 执行回滚语句
+2. 最新的binlog文件是mysql-bin.000047，我们再定位误操作SQL的binlog位置
 
 	```bash
-	$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t c --start-file='mysql-bin.000002' --start-pos=682 --end-pos=831 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
+$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047'
+输出：
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:51' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 3346 end 3556
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:56' AND `id`=4 AND `name`='小李' LIMIT 1; #start 3346 end 3556
+```
+        
+3. 生成回滚sql，并检查回滚sql是否正确
 
-	回滚成功
-	```
+```bash
+$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B
+输出：
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:56', 4, '小李'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:51', 3, '小孙'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 3346 end 3556
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 3346 end 3556
+```
+        
+3. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
+```bash
+$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
 
-**案例二 主从切换后数据不一致的修复**
-
-详细描述可参见[example/FixOldMasterExtraData.md](./example/FixOldMasterExtraData.md)
-
-1. 提取old master未同步的数据，并对其中的insert语句去除主键（为了防止步骤3中出现主键冲突）
-
-    ```
-    $ python binlog2sql.py --popPk -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' > oldMaster.sql
-    ```
-
-2. 将old master回滚，开启同步。同步正常；
-
-    ```
-    $ python binlog2sql.py --flashback -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
-    ```
-
-3. 在new master重新导入改造后的sql；
-
-    ```
-    $ mysql -h10.1.1.2 -P3306 -uadmin -p'admin' < oldMaster.sql
-    ```
+mysql> select * from tbl;
++----+--------+---------------------+
+| id | name   | addtime             |
++----+--------+---------------------+
+|  1 | 小赵   | 2016-12-10 00:04:33 |
+|  2 | 小钱   | 2016-12-10 00:04:48 |
+|  3 | 小孙   | 2016-12-10 00:04:51 |
+|  4 | 小李   | 2016-12-10 00:04:56 |
++----+--------+---------------------+
+```
 
 ###限制
-* mysql server必须开启，离线模式下不能解析binlog
-* binlog格式必须是行模式
-* flashback模式只支持DML，DDL将不做输出
+* mysql server必须开启，离线模式下不能解析
 * flashback模式，一次性处理的binlog不宜过大，不能超过内存大小(有待优化)
-* 目前已测试环境
-    * Python 2.7
-    * MySQL 5.6
+
 
 ###优点（对比mysqlbinlog）
 
@@ -155,6 +180,7 @@ DELETE FROM `test`.`test4` WHERE `data`='World' AND `id`=1 AND `data2`='Hello' L
 * 自带flashback、popPk解析模式，无需再装补丁
 * 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
+
 
 
 ###联系我
