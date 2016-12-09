@@ -113,7 +113,7 @@ INSERT INTO `test`.`f`(`did`, `updateTime`, `uid`) VALUES (19, '2016-12-06 12:55
 
 	>当然有。阿里彭立勋对mysqlbinlog增加了flashback的特性，这应该是mysql最早有的flashback功能，彭解决的是DML的回滚，并说明了利用binlog进行DML闪回的设计思路。DDL回滚特性也是由阿里团队提出并实现的。这两个功能是有创新精神的，此后出现的闪回工具基本都是对上面两者的模仿。另外，去哪儿开源的Inception是一套MySQL自动化运维工具，这个就比较重了，支持DML回滚，还不是从binlog回滚的，是从备份回滚的，也支持DDL回滚表结构，数据是回滚不了滴~
 
-本文如有任何错误，烦请告知。如有mysql回滚相关的优秀工具优秀文章遗漏，更烦请告知
+如有mysql回滚相关的优秀工具优秀文章遗漏，烦请告知。
 
 我的邮箱 danfengcao.info@gmail.com
 

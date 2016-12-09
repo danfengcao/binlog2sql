@@ -171,6 +171,8 @@ class Binlog2sql(object):
 
             cur.execute("SHOW MASTER LOGS")
             binIndex = [row[0] for row in cur.fetchall()]
+            if self.startFile not in binIndex:
+                raise ValueError('parameter error: startFile %s not in mysql server' % self.startFile)
             binlog2i = lambda x: x.split('.')[1]
             for bin in binIndex:
                 if binlog2i(bin) >= binlog2i(self.startFile) and binlog2i(bin) <= binlog2i(self.endFile):
