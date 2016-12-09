@@ -85,6 +85,8 @@ DELETE FROM `test`.`test4` WHERE `data`='World' AND `id`=1 AND `data2`='Hello' L
 
 #### **案例一 跑错SQL，需要紧急回滚**
 
+详细描述可参见[example/mysql-rollback-your-data.md](./example/mysql-rollback-your-data.md)
+
 **背景**：误删test库c表的数据，需要紧急回滚。
 
 **步骤**：
