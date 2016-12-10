@@ -47,19 +47,21 @@ pip install -r requirements.txt
 $ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -t test3 test4 --start-file='mysql-bin.000002'
 
 输出：
-INSERT INTO `test`.`test3`(`data`, `id`, `data2`) VALUES ('Hello', 1, 'World'); #start 474 end 642
-INSERT INTO `test`.`test4`(`data`, `id`, `data2`) VALUES ('Hello', 1, 'World'); #start 669 end 837
-UPDATE `test`.`test4` SET `data`='World', `id`=1, `data2`='Hello' WHERE `data`='Hello' AND `id`=1 AND `data2`='World' LIMIT 1; #start 864 end 1052
-DELETE FROM `test`.`test4` WHERE `data`='World' AND `id`=1 AND `data2`='Hello' LIMIT 1; #start 1079 end 1247
+INSERT INTO `test`.`test4`(`addtime`, `data`, `id`) VALUES ('2016-12-10 13:03:10', 'test', 1); #start 185 end 351
+INSERT INTO `test`.`test3`(`addtime`, `data`, `id`) VALUES ('2016-12-10 13:03:22', '中文', 3); #start 378 end 543
+INSERT INTO `test`.`test3`(`addtime`, `data`, `id`) VALUES ('2016-12-10 13:03:38', 'english', 4); #start 570 end 736
+UPDATE `test`.`test3` SET `addtime`='2016-12-10 12:00:00', `data`='中文', `id`=3 WHERE `addtime`='2016-12-10 13:03:22' AND `data`='中文' AND `id`=3 LIMIT 1; #start 763 end 954
+DELETE FROM `test`.`test3` WHERE `addtime`='2016-12-10 13:03:38' AND `data`='english' AND `id`=4 LIMIT 1; #start 981 end 1147
 ```
 
 **解析出回滚SQL**
 
 ```bash
-python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttest4 --start-file='mysql-bin.000002' --start-pos=1079 --end-pos=1247
+python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttest3 --start-file='mysql-bin.000002' --start-pos=763 --end-pos=1147
 
 输出：
-DELETE FROM `test`.`test4` WHERE `data`='World' AND `id`=1 AND `data2`='Hello' LIMIT 1; #start 1079 end 1247
+INSERT INTO `test`.`test3`(`addtime`, `data`, `id`) VALUES ('2016-12-10 13:03:38', 'english', 4); #start 981 end 1147
+UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`=3 WHERE `addtime`='2016-12-10 12:00:00' AND `data`='中文' AND `id`=3 LIMIT 1; #start 763 end 954
 ```
 ###选项
 **mysql连接配置**
@@ -171,7 +173,7 @@ mysql> select * from tbl;
 
 ###限制
 * mysql server必须开启，离线模式下不能解析
-* flashback模式，一次性处理的binlog不宜过大，不能超过内存大小(有待优化)
+* flashback模式，生成的回滚语句不能超过内存大小(有待优化)
 
 
 ###优点（对比mysqlbinlog）
