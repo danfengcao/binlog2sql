@@ -15,15 +15,15 @@ MySQL误操作后如何快速恢复数据
 	[mysqld]
 	server-id = 1
 	log_bin = /var/log/mysql/mysql-bin.log
-	max_binlog_size = 1000M
+	max_binlog_size = 100M
 	binlog-format = row
 如果没有开启binlog，也没有预先生成回滚SQL，那真的无法快速回滚了。对存放重要业务数据的MySQL，强烈建议开启binlog。
 
 随后，安装开源工具[binlog2sql](https://github.com/danfengcao/binlog2sql)。binlog2sql是一款简单易用的binlog解析工具，其中一个功能就是生成回滚SQL。
 
 ```
-git clone https://github.com/danfengcao/binlog2sql.git
-pip install -r requirements.txt
+shell> git clone https://github.com/danfengcao/binlog2sql.git
+shell> pip install -r requirements.txt
 ```
 
 然后，我们就可以生成回滚SQL了。

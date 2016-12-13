@@ -84,6 +84,10 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 --end-pos end-file的末尾解析位置。可选。默认为end-file的最末位置；若解析模式为stop-never，此选项失效。
 
+--start-datetime 从哪个时间点的binlog开始解析，格式必须为datetime，如'2016-11-11 11:11:11'。可选。默认不过滤。
+
+--stop-datetime 到哪个时间点的binlog停止解析，格式必须为datetime，如'2016-11-11 11:11:11'。可选。默认不过滤。
+
 **对象过滤**
 
 -d, --databases 只输出目标db的sql。可选。默认为空。
