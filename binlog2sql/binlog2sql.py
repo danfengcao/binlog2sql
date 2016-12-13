@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os
+import os, datetime
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.row_event import (
@@ -14,8 +14,8 @@ from binlog2sql_util import command_line_args, concat_sql_from_binlogevent, crea
 
 class Binlog2sql(object):
 
-    def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None,
-                 endPos=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, stopnever=False):
+    def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None, endPos=None, startTime=None,
+                 stopTime=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, stopnever=False):
         '''
         connectionSettings: {'host': 127.0.0.1, 'port': 3306, 'user': slave, 'passwd': slave}
         '''
@@ -24,9 +24,11 @@ class Binlog2sql(object):
 
         self.connectionSettings = connectionSettings
         self.startFile = startFile
-        self.startPos = startPos if startPos else 4
+        self.startPos = startPos if startPos else 4 # use binlog v4
         self.endFile = endFile if endFile else startFile
         self.endPos = endPos
+        self.startTime = datetime.datetime.strptime(startTime, "%Y-%m-%d %H:%M:%S") if startTime else datetime.datetime.strptime('1970-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")
+        self.stopTime = datetime.datetime.strptime(stopTime, "%Y-%m-%d %H:%M:%S") if stopTime else datetime.datetime.strptime('2999-12-31 00:00:00', "%Y-%m-%d %H:%M:%S")
 
         self.only_schemas = only_schemas if only_schemas else None
         self.only_tables = only_tables if only_tables else None
@@ -69,9 +71,9 @@ class Binlog2sql(object):
                 if not self.stopnever:
                     if (stream.log_file == self.endFile and stream.log_pos == self.endPos) or (stream.log_file == self.eofFile and stream.log_pos == self.eofPos):
                         flagLastEvent = True
-                    elif stream.log_file not in self.binlogList:
-                        break
-                    elif (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos):
+                    elif datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']) < self.startTime:
+                        continue
+                    elif (stream.log_file not in self.binlogList) or (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos) or (datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']) >= self.stopTime):
                         break
                     # else:
                     #     raise ValueError('unknown binlog file or position')
@@ -117,5 +119,6 @@ if __name__ == '__main__':
     connectionSettings = {'host':args.host, 'port':args.port, 'user':args.user, 'passwd':args.password}
     binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
                             startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,
-                            only_schemas=args.databases, only_tables=args.tables, popPk=args.popPk, flashback=args.flashback, stopnever=args.stopnever)
+                            startTime=args.startTime, stopTime=args.stopTime, only_schemas=args.databases,
+                            only_tables=args.tables, popPk=args.popPk, flashback=args.flashback, stopnever=args.stopnever)
     binlog2sql.process_binlog()

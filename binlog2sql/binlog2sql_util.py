@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, sys, argparse
+import os, sys, argparse, datetime
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.row_event import (
@@ -10,6 +10,14 @@ from pymysqlreplication.row_event import (
     DeleteRowsEvent,
 )
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
+
+
+def is_valid_datetime(string):
+    try:
+        datetime.datetime.strptime(string, "%Y-%m-%d %H:%M:%S")
+        return True
+    except:
+        return False
 
 def create_unique_file(filename):
     version = 0
@@ -40,11 +48,15 @@ def command_line_parser():
     range.add_argument('--start-file', dest='startFile', type=str,
                        help='Start binlog file to be parsed')
     range.add_argument('--start-pos', dest='startPos', type=int,
-                       help='start position of start binlog file', default=4)
+                       help='start position of the --start-file', default=4)
     range.add_argument('--end-file', dest='endFile', type=str,
                        help="End binlog file to be parsed. default: '--start-file'", default='')
     range.add_argument('--end-pos', dest='endPos', type=int,
-                       help="stop position of end binlog file. default: end position of '--end-file'", default=0)
+                       help="stop position of --end-file. default: end position of '--end-file'", default=0)
+    range.add_argument('--start-datetime', dest='startTime', type=str,
+                       help="Start reading the binlog at first event having a datetime equal or posterior to the argument; the argument must be a date and time in the local time zone, in any format accepted by the MySQL server for DATETIME and TIMESTAMP types, for example: 2004-12-25 11:25:56 (you should probably use quotes for your shell to set it properly).", default='')
+    range.add_argument('--stop-datetime', dest='stopTime', type=str,
+                       help="Stop reading the binlog at first event having a datetime equal or posterior to the argument; the argument must be a date and time in the local time zone, in any format accepted by the MySQL server for DATETIME and TIMESTAMP types, for example: 2004-12-25 11:25:56 (you should probably use quotes for your shell to set it properly).", default='')
     parser.add_argument('--stop-never', dest='stopnever', action='store_true',
                         help='Wait for more data from the server. default: stop replicate at the last binlog when you start binlog2sql', default=False)
 
@@ -73,6 +85,8 @@ def command_line_args():
         raise ValueError('only one of flashback or stop-never can be True')
     if args.flashback and args.popPk:
         raise ValueError('only one of flashback or popPk can be True')
+    if (args.startTime and not is_valid_datetime(args.startTime)) or (args.stopTime and not is_valid_datetime(args.stopTime)):
+        raise ValueError('Incorrect date and time argument')
     return args
 
 
@@ -147,5 +161,5 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, f
                 binlogevent.schema, fix_object(binlogevent.query)
             )
     if type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
-        sql += ' #start %s end %s' % (eStartPos, binlogevent.packet.log_pos)
+        sql += ' #start %s end %s time %s' % (eStartPos, binlogevent.packet.log_pos, datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']))
     return sql

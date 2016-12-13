@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 然后，我们就可以生成回滚SQL了。
 
-**背景**：误删了test库tbl表整张表的数据，需要紧急回滚。
+**背景**：小明在20点多时误删了test库tbl表整张表的数据，需要紧急回滚。
 
 ```bash
 test库tbl表原有数据
@@ -38,15 +38,15 @@ mysql> select * from tbl;
 +----+--------+---------------------+
 |  1 | 小赵   | 2016-12-10 00:04:33 |
 |  2 | 小钱   | 2016-12-10 00:04:48 |
-|  3 | 小孙   | 2016-12-10 00:04:51 |
-|  4 | 小李   | 2016-12-10 00:04:56 |
+|  3 | 小孙   | 2016-12-13 20:25:00 |
+|  4 | 小李   | 2016-12-12 00:00:00 |
 +----+--------+---------------------+
 4 rows in set (0.00 sec)
 
 mysql> delete from tbl;
 Query OK, 4 rows affected (0.00 sec)
 
-tbl表被清空
+20:28时，tbl表误操作被清空
 mysql> select * from tbl;
 Empty set (0.00 sec)
 ```
@@ -56,41 +56,44 @@ Empty set (0.00 sec)
 1. 登录mysql，查看目前的binlog文件
 
 	```bash
-mysql> show master logs;
+mysql> show master status;
 +------------------+-----------+
 | Log_name         | File_size |
 +------------------+-----------+
-| mysql-bin.000046 |  12262268 |
-| mysql-bin.000047 |      3583 |
+| mysql-bin.000051 |       967 |
+| mysql-bin.000052 |       965 |
 +------------------+-----------+
-	```
+```
 
-2. 最新的binlog文件是mysql-bin.000047，我们再定位误操作SQL的binlog位置
+2. 最新的binlog文件是mysql-bin.000052，我们再定位误操作SQL的binlog位置。误操作人只能知道大致的误操作时间，我们根据大致时间过滤数据。
 
 	```bash
-$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047'
+shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-datetime='2016-12-13 20:25:00' --stop-datetime='2016-12-13 20:30:00'
 输出：
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 3346 end 3556
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 3346 end 3556
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:51' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 3346 end 3556
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:56' AND `id`=4 AND `name`='小李' LIMIT 1; #start 3346 end 3556
-	```
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 4 end 290 time 2016-12-13 20:25:46
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:26:00', 4, '小李'); #start 317 end 487 time 2016-12-13 20:26:26
+UPDATE `test`.`tbl` SET `addtime`='2016-12-12 00:00:00', `id`=4, `name`='小李' WHERE `addtime`='2016-12-13 20:26:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 514 end 701 time 2016-12-13 20:27:07
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-13 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-12 00:00:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+```
         
-3. 生成回滚sql，并检查回滚sql是否正确
+3. 我们得到了误操作sql的准确位置在728-938之间，再根据位置进一步过滤，使用flashback模式生成回滚sql，检查回滚sql是否正确
 
-	```bash
-$ python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B
+```bash
+shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-pos=3346 --end-pos=3556 -B
 输出：
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:56', 4, '小李'); #start 3346 end 3556
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:51', 3, '小孙'); #start 3346 end 3556
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 3346 end 3556
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 3346 end 3556
-	```
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 4, '小李'); #start 728 end 938 time 2016-12-13 20:28:05
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 728 end 938 time 2016-12-13 20:28:05
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 728 end 938 time 2016-12-13 20:28:05
+INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 728 end 938 time 2016-12-13 20:28:05
+```
         
-4. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
+3. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
-	```bash
-$ python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000047' --start-pos=3346 --end-pos=3556 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
+```bash
+shell> python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-pos=3346 --end-pos=3556 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
 
 mysql> select * from tbl;
 +----+--------+---------------------+
@@ -98,8 +101,8 @@ mysql> select * from tbl;
 +----+--------+---------------------+
 |  1 | 小赵   | 2016-12-10 00:04:33 |
 |  2 | 小钱   | 2016-12-10 00:04:48 |
-|  3 | 小孙   | 2016-12-10 00:04:51 |
-|  4 | 小李   | 2016-12-10 00:04:56 |
+|  3 | 小孙   | 2016-12-13 20:25:00 |
+|  4 | 小李   | 2016-12-12 00:00:00 |
 +----+--------+---------------------+
 	```
 
