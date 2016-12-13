@@ -66,7 +66,10 @@ def command_line_args():
 
 def compare_items((k, v)):
     #caution: if v is NULL, may need to process
-    return '`%s`=%%s'%k
+    if v is None:
+        return '`%s` IS %%s'%k
+    else:
+        return '`%s`=%%s'%k
 
 def fix_object(value):
     """Fixes python objects so that they can be properly inserted into SQL queries"""
