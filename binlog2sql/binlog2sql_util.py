@@ -157,9 +157,9 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, f
             )
             sql = cursor.mogrify(template, map(fix_object, row['after_values'].values()+row['before_values'].values()))
         elif isinstance(binlogevent, QueryEvent) and binlogevent.query != 'BEGIN' and binlogevent.query != 'COMMIT':
-            sql ='USE {0};\n{1};'.format(
-                binlogevent.schema, fix_object(binlogevent.query)
-            )
+            if binlogevent.schema:
+                sql = 'USE {0};\n'.format(binlogevent.schema)
+            sql += '{0};'.format(fix_object(binlogevent.query))
     if type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
         sql += ' #start %s end %s time %s' % (eStartPos, binlogevent.packet.log_pos, datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']))
     return sql
