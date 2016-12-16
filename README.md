@@ -40,13 +40,13 @@ shell> pip install -r requirements.txt
     binlog-format = row
 
 ### 需要给client端赋予的最小权限集合：
-SELECT, SUPER/REPLICATION CLIENT, REPLICATION SLAVE
+select, super/replication client, replication slave
 
 **权限说明:**
 
-SELECT：需要读取server端的information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
-SUPER/REPLICATION CLIENT：两个权限都可以，需要执行'SHOW MASTER STATUS'，获取server端的binlog列表
-REPLICATION SLAVE：通过BINLOG_DUMP协议获取binlog内容的权限
+select：需要读取server端的information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
+super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS'，获取server端的binlog列表
+replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
 
 ###基本用法
 
