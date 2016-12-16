@@ -15,7 +15,7 @@ from binlog2sql_util import command_line_args, concat_sql_from_binlogevent, crea
 class Binlog2sql(object):
 
     def __init__(self, connectionSettings, startFile=None, startPos=None, endFile=None, endPos=None, startTime=None,
-                 stopTime=None, only_schemas=None, only_tables=None, popPk=False, flashback=False, stopnever=False):
+                 stopTime=None, only_schemas=None, only_tables=None, nopk=False, flashback=False, stopnever=False):
         '''
         connectionSettings: {'host': 127.0.0.1, 'port': 3306, 'user': slave, 'passwd': slave}
         '''
@@ -32,7 +32,7 @@ class Binlog2sql(object):
 
         self.only_schemas = only_schemas if only_schemas else None
         self.only_tables = only_tables if only_tables else None
-        self.popPk, self.flashback, self.stopnever = (popPk, flashback, stopnever)
+        self.nopk, self.flashback, self.stopnever = (nopk, flashback, stopnever)
 
         self.binlogList = []
         self.connection = pymysql.connect(**self.connectionSettings)
@@ -82,12 +82,12 @@ class Binlog2sql(object):
                     eStartPos = lastPos
 
                 if isinstance(binlogevent, QueryEvent):
-                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, flashback=self.flashback, popPk=self.popPk)
+                    sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, flashback=self.flashback, nopk=self.nopk)
                     if sql:
                         print sql
                 elif type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
                     for row in binlogevent.rows:
-                        sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, popPk=self.popPk, eStartPos=eStartPos)
+                        sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, nopk=self.nopk, eStartPos=eStartPos)
                         if self.flashback:
                             ftmp.write(sql + '\n')
                         else:
@@ -120,5 +120,5 @@ if __name__ == '__main__':
     binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
                             startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,
                             startTime=args.startTime, stopTime=args.stopTime, only_schemas=args.databases,
-                            only_tables=args.tables, popPk=args.popPk, flashback=args.flashback, stopnever=args.stopnever)
+                            only_tables=args.tables, nopk=args.nopk, flashback=args.flashback, stopnever=args.stopnever)
     binlog2sql.process_binlog()

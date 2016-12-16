@@ -47,12 +47,12 @@ def command_line_parser():
     range = parser.add_argument_group('range filter')
     range.add_argument('--start-file', dest='startFile', type=str,
                        help='Start binlog file to be parsed')
-    range.add_argument('--start-pos', dest='startPos', type=int,
-                       help='start position of the --start-file', default=4)
-    range.add_argument('--end-file', dest='endFile', type=str,
-                       help="End binlog file to be parsed. default: '--start-file'", default='')
-    range.add_argument('--end-pos', dest='endPos', type=int,
-                       help="stop position of --end-file. default: end position of '--end-file'", default=0)
+    range.add_argument('--start-position', '--start-pos', dest='startPos', type=int,
+                       help='Start position of the --start-file', default=4)
+    range.add_argument('--stop-file', '--end-file', dest='endFile', type=str,
+                       help="Stop binlog file to be parsed. default: '--start-file'", default='')
+    range.add_argument('--stop-position', '--end-pos', dest='endPos', type=int,
+                       help="Stop position of --stop-file. default: latest position of '--stop-file'", default=0)
     range.add_argument('--start-datetime', dest='startTime', type=str,
                        help="Start reading the binlog at first event having a datetime equal or posterior to the argument; the argument must be a date and time in the local time zone, in any format accepted by the MySQL server for DATETIME and TIMESTAMP types, for example: 2004-12-25 11:25:56 (you should probably use quotes for your shell to set it properly).", default='')
     range.add_argument('--stop-datetime', dest='stopTime', type=str,
@@ -69,7 +69,7 @@ def command_line_parser():
                         help='tables you want to process', default='')
 
     exclusive = parser.add_mutually_exclusive_group()
-    exclusive.add_argument('--popPk', dest='popPk', action='store_true',
+    exclusive.add_argument('-K', '--no-primary-key', dest='nopk', action='store_true',
                            help='Generate insert sql without primary key if exists', default=False)
     exclusive.add_argument('-B', '--flashback', dest='flashback', action='store_true',
                            help='Flashback data to start_postition of start_file', default=False)
@@ -83,8 +83,8 @@ def command_line_args():
         sys.exit(1)
     if args.flashback and args.stopnever:
         raise ValueError('only one of flashback or stop-never can be True')
-    if args.flashback and args.popPk:
-        raise ValueError('only one of flashback or popPk can be True')
+    if args.flashback and args.nopk:
+        raise ValueError('only one of flashback or nopk can be True')
     if (args.startTime and not is_valid_datetime(args.startTime)) or (args.stopTime and not is_valid_datetime(args.stopTime)):
         raise ValueError('Incorrect date and time argument')
     return args
@@ -104,9 +104,9 @@ def fix_object(value):
     else:
         return value
 
-def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, flashback=False, popPk=False):
-    if flashback and popPk:
-        raise ValueError('only one of flashback or popPk can be True')
+def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, flashback=False, nopk=False):
+    if flashback and nopk:
+        raise ValueError('only one of flashback or nopk can be True')
     if type(binlogevent) not in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent, QueryEvent):
         raise ValueError('binlogevent must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
@@ -133,7 +133,7 @@ def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, f
             sql = cursor.mogrify(template, map(fix_object, row['before_values'].values()+row['after_values'].values()))
     else:
         if isinstance(binlogevent, WriteRowsEvent):
-            if popPk:
+            if nopk:
                 tableInfo = (binlogevent.table_map)[binlogevent.table_id]
                 if tableInfo.primary_key:
                     row['values'].pop(tableInfo.primary_key)

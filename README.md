@@ -40,13 +40,14 @@ shell> pip install -r requirements.txt
     binlog-format = row
 
 ### 需要给client端赋予的最小权限集合：
-select, super/replication client, replication slave
 
-**权限说明:**
+    select, super/replication client, replication slave
 
-select：需要读取server端的information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
-super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS', 获取server端的binlog列表
-replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
+**权限说明**
+
+* select：需要读取server端的information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
+* super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS', 获取server端的binlog列表
+* replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
 
 ###基本用法
 
@@ -80,9 +81,9 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 --stop-never 持续同步binlog。可选。不加则同步至执行命令时最新的binlog位置。
 
---popPk 对INSERT语句去除主键。可选。
+-K, --no-primary-key 对INSERT语句去除主键。可选。
 
--B, --flashback 生成回滚语句。可选。与stop-never或popPk不能同时添加。
+-B, --flashback 生成回滚语句。可选。与stop-never或no-primary-key不能同时添加。
 
 **解析范围控制**
 
@@ -158,7 +159,7 @@ DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `n
 DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-13 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
 DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-12 00:00:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
 ```
-        
+
 3. 我们得到了误操作sql的准确位置在728-938之间，再根据位置进一步过滤，使用flashback模式生成回滚sql，检查回滚sql是否正确
 
 ```bash
@@ -169,7 +170,7 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00',
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 728 end 938 time 2016-12-13 20:28:05
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 728 end 938 time 2016-12-13 20:28:05
 ```
-        
+
 3. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
 ```bash
@@ -194,7 +195,7 @@ mysql> select * from tbl;
 ###优点（对比mysqlbinlog）
 
 * 纯Python开发，安装与使用都很简单
-* 自带flashback、popPk解析模式，无需再装补丁
+* 自带flashback、no-primary-key解析模式，无需再装补丁
 * 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
 

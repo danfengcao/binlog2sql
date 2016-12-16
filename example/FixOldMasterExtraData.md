@@ -41,7 +41,7 @@ MySQL主从切换后如何进行数据修复
 我们使用了纯Python开发的工具[binlog2sql](https://github.com/danfengcao/binlog2sql)来操作，执行命令如下
 
 ```bash
-$ python binlog2sql.py --popPk -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' > oldMaster.sql
+$ python binlog2sql.py --no-primary-key -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' > oldMaster.sql
 
 $ python binlog2sql.py --flashback -h10.1.1.1 -P3306 -uadmin -p'admin' --start-file='mysql-bin.mysql-bin.000040' --start-pos=125466 --end-file='mysql-bin.000041' | mysql -h10.1.1.1 -P3306 -uadmin -p'admin'
 
