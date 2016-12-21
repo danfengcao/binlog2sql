@@ -1,12 +1,12 @@
 MySQL误操作后如何快速恢复数据
 ========================
 
-基本上每个跟数据库打交道的程序员（当然也可能是你同事）都会碰一个问题，MySQL误操作后如何快速回滚？比如，delete一张表，忘加限制条件，整张表都没了。假如这还是线上环境核心业务数据，那这事就闹大了。误操作后，能快速回滚数据是非常重要的。
+基本上每个跟数据库打交道的程序员（当然也可能是你同事）都会碰一个问题，MySQL误操作后如何快速回滚？比如，不小心update了整张表的某个字段，或者delete一张表，忘加限制条件，整张表都没了。假如这还是线上环境核心业务数据，那这事就闹大了。误操作后，能快速回滚数据是非常重要的。
 
 
 传统解法
 ===
-用全量备份重搭实例，再利用增量binlog备份，恢复到误操作之前的状态。然后跳过误操作的SQL，再继续应用binlog。此法费时费力，不值得再推荐。
+用全量备份重搭实例，再利用增量binlog备份，恢复到误操作之前的状态。然后跳过误操作的SQL，再继续应用binlog。对于DML的回滚，此法费时费力，不值得再推荐。
 
 利用binlog2sql快速闪回
 ===
@@ -79,10 +79,10 @@ DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-13 20:25:00' AND `id`=3 AND `n
 DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-12 00:00:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
 ```
         
-3. 我们得到了误操作sql的准确位置在728-938之间，再根据位置进一步过滤，使用flashback模式生成回滚sql，检查回滚sql是否正确
+3. 我们得到了误操作sql的准确位置在728-938之间，再根据位置过滤，使用flashback模式生成回滚sql，检查回滚sql是否正确(注：真实环境下，此步经常会进一步筛选出需要的sql。结合grep、编辑器等)
 
-```bash
-shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-pos=3346 --end-pos=3556 -B
+	```bash
+shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-pos=3346 --end-pos=3556 -B > rollback.sql | cat
 输出：
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 4, '小李'); #start 728 end 938 time 2016-12-13 20:28:05
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 728 end 938 time 2016-12-13 20:28:05
@@ -90,12 +90,12 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48',
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 728 end 938 time 2016-12-13 20:28:05
 ```
         
-3. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
+4. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
-```bash
-shell> python binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-pos=3346 --end-pos=3556 -B | mysql -h127.0.0.1 -P3306 -uadmin -p'admin'
+	```bash
+	shell> mysql -h127.0.0.1 -P3306 -uadmin -p'admin' < rollback.sql
 
-mysql> select * from tbl;
+	mysql> select * from tbl;
 +----+--------+---------------------+
 | id | name   | addtime             |
 +----+--------+---------------------+
@@ -104,7 +104,7 @@ mysql> select * from tbl;
 |  3 | 小孙   | 2016-12-13 20:25:00 |
 |  4 | 小李   | 2016-12-12 00:00:00 |
 +----+--------+---------------------+
-	```
+```
 
 至此，不用再担心被炒鱿鱼了。
 
