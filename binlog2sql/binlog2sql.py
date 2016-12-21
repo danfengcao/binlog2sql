@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os, datetime
+import os, sys, datetime
 import pymysql
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.row_event import (
@@ -71,9 +71,9 @@ class Binlog2sql(object):
                 if not self.stopnever:
                     if (stream.log_file == self.endFile and stream.log_pos == self.endPos) or (stream.log_file == self.eofFile and stream.log_pos == self.eofPos):
                         flagLastEvent = True
-                    elif datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']) < self.startTime:
+                    elif datetime.datetime.fromtimestamp(binlogevent.timestamp) < self.startTime:
                         continue
-                    elif (stream.log_file not in self.binlogList) or (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos) or (datetime.datetime.fromtimestamp(binlogevent.__dict__['timestamp']) >= self.stopTime):
+                    elif (stream.log_file not in self.binlogList) or (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos) or (datetime.datetime.fromtimestamp(binlogevent.timestamp) >= self.stopTime):
                         break
                     # else:
                     #     raise ValueError('unknown binlog file or position')
@@ -85,7 +85,7 @@ class Binlog2sql(object):
                     sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, flashback=self.flashback, nopk=self.nopk)
                     if sql:
                         print sql
-                elif type(binlogevent) in (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent):
+                elif isinstance(binlogevent, WriteRowsEvent) or isinstance(binlogevent, UpdateRowsEvent) or isinstance(binlogevent, DeleteRowsEvent):
                     for row in binlogevent.rows:
                         sql = concat_sql_from_binlogevent(cursor=cur, binlogevent=binlogevent, row=row , flashback=self.flashback, nopk=self.nopk, eStartPos=eStartPos)
                         if self.flashback:
@@ -93,7 +93,7 @@ class Binlog2sql(object):
                         else:
                             print sql
 
-                if type(binlogevent) not in (RotateEvent, FormatDescriptionEvent):
+                if isinstance(binlogevent, RotateEvent) or isinstance(binlogevent, FormatDescriptionEvent):
                     lastPos = binlogevent.packet.log_pos
                 if flagLastEvent:
                     break
@@ -115,7 +115,7 @@ class Binlog2sql(object):
 
 if __name__ == '__main__':
 
-    args = command_line_args()
+    args = command_line_args(sys.argv[1:])
     connectionSettings = {'host':args.host, 'port':args.port, 'user':args.user, 'passwd':args.password}
     binlog2sql = Binlog2sql(connectionSettings=connectionSettings, startFile=args.startFile,
                             startPos=args.startPos, endFile=args.endFile, endPos=args.endPos,
