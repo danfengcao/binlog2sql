@@ -111,6 +111,8 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 详细描述可参见[example/mysql-rollback-your-data.md](./example/mysql-rollback-your-data.md)
 
+更多应用案例可参见[example/](./example/)
+
 ```bash
 test库tbl表原有数据
 mysql> select * from tbl;
@@ -189,7 +191,7 @@ mysql> select * from tbl;
 
 ###限制
 * mysql server必须开启，离线模式下不能解析
-* flashback模式，生成的回滚语句不能超过内存大小(有待优化)
+* flashback模式，生成的回滚语句不能超过内存大小(有待优化，mysqlbinlog有同样的问题)
 
 
 ###优点（对比mysqlbinlog）
@@ -199,18 +201,15 @@ mysql> select * from tbl;
 * 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
 
+###贡献者
 
+* danfengcao 维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
+* 大众点评DBA团队 想法交流，使用体验 [dba_op@dianping.com](dba_op@dianping.com)
+* 赵承勇 pymysqlreplication权限bug [https://github.com/imzcy1987](https://github.com/imzcy1987)
+* 陈路炳 bug报告(字段值为空时的处理)，使用体验 [https://github.com/bingluchen](https://github.com/bingluchen)
 
 ###联系我
-有任何问题，请与我联系 [danfengcao.info@gmail.com](danfengcao.info@gmail.com)
+有任何问题，请与我联系。微信：danfeng053005 邮箱：[danfengcao.info@gmail.com](danfengcao.info@gmail.com)
 
-
-
-参考资料
-==============
-[1] 彭立勋, [MySQL下实现闪回的设计思路](http://www.penglixun.com/tech/database/mysql_flashback_feature.html)
-
-[2] \_\_七把刀__, [MySQL binlog格式解析](http://www.jianshu.com/p/c16686b35807?hmsr=toutiao.io&utm_medium=toutiao.io&utm_source=toutiao.io)
-
-[3] noplay, [Pure Python Implementation of MySQL replication protocol build on top of PyMYSQL](https://github.com/noplay/python-mysql-replication)
+欢迎pull requests！
 
