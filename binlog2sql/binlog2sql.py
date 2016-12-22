@@ -93,7 +93,7 @@ class Binlog2sql(object):
                         else:
                             print sql
 
-                if isinstance(binlogevent, RotateEvent) or isinstance(binlogevent, FormatDescriptionEvent):
+                if not isinstance(binlogevent, RotateEvent) and not isinstance(binlogevent, FormatDescriptionEvent):
                     lastPos = binlogevent.packet.log_pos
                 if flagLastEvent:
                     break
