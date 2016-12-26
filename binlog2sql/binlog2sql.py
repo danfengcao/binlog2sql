@@ -72,6 +72,8 @@ class Binlog2sql(object):
                     if (stream.log_file == self.endFile and stream.log_pos == self.endPos) or (stream.log_file == self.eofFile and stream.log_pos == self.eofPos):
                         flagLastEvent = True
                     elif datetime.datetime.fromtimestamp(binlogevent.timestamp) < self.startTime:
+                        if not (isinstance(binlogevent, RotateEvent) or isinstance(binlogevent, FormatDescriptionEvent)):
+                            lastPos = binlogevent.packet.log_pos
                         continue
                     elif (stream.log_file not in self.binlogList) or (self.endPos and stream.log_file == self.endFile and stream.log_pos > self.endPos) or (stream.log_file == self.eofFile and stream.log_pos > self.eofPos) or (datetime.datetime.fromtimestamp(binlogevent.timestamp) >= self.stopTime):
                         break
@@ -93,7 +95,7 @@ class Binlog2sql(object):
                         else:
                             print sql
 
-                if not isinstance(binlogevent, RotateEvent) and not isinstance(binlogevent, FormatDescriptionEvent):
+                if not (isinstance(binlogevent, RotateEvent) or isinstance(binlogevent, FormatDescriptionEvent)):
                     lastPos = binlogevent.packet.log_pos
                 if flagLastEvent:
                     break
