@@ -24,7 +24,7 @@ binlog2sql
 ==============
 
 ```
-shell> git clone https://github.com/danfengcao/binlog2sql.git
+shell> git clone https://github.com/danfengcao/binlog2sql.git && cd binlog2sql
 shell> pip install -r requirements.txt
 ```
 
@@ -34,18 +34,21 @@ shell> pip install -r requirements.txt
 ### MySQL server必须设置以下参数:
 
     [mysqld]
-    server-id = 1
+    server_id = 1
     log_bin = /var/log/mysql/mysql-bin.log
     max_binlog_size = 100M
-    binlog-format = row
+    binlog_format = row
 
-### 需要给client端赋予的最小权限集合：
+### user需要的最小权限集合：
 
     select, super/replication client, replication slave
+    
+    建议授权
+    GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 
 
 **权限说明**
 
-* select：需要读取server端的information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
+* select：需要读取server端information_schema.COLUMNS表，获取表结构的元信息，拼接成可视化的sql语句
 * super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS', 获取server端的binlog列表
 * replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
 
@@ -211,5 +214,5 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 ###联系我
 有任何问题，请与我联系。微信：danfeng053005 邮箱：[danfengcao.info@gmail.com](danfengcao.info@gmail.com)
 
-欢迎pull requests！
+欢迎提问题提需求，欢迎pull requests！
 
