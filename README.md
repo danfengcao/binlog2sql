@@ -13,7 +13,7 @@ binlog2sql
 
 项目状态
 ===
-正常维护。已在大众点评线上环境使用。线上环境的操作，请在对MySQL熟悉的同学指导下进行
+正常维护。应用于大众点评线上环境。线上环境的操作，请在对MySQL**相当熟悉**的同学指导下进行
 
 * 已测试环境
     * Python 2.6, 2.7
@@ -112,9 +112,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 #### **误删整张表数据，需要紧急回滚**
 
-详细描述可参见[example/mysql-rollback-your-data.md](./example/mysql-rollback-your-data.md)
-
-更多应用案例可参见[example/](./example/)
+闪回详细介绍可参见example目录下《闪回原理与实战》[example/mysql-flashback-priciple-and-practice.md](./example/mysql-flashback-priciple-and-practice.md)
 
 ```bash
 test库tbl表原有数据
@@ -156,7 +154,6 @@ mysql> show master status;
 	```bash
 shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-datetime='2016-12-13 20:25:00' --stop-datetime='2016-12-13 20:30:00'
 输出：
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 4 end 290 time 2016-12-13 20:25:46
 INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:26:00', 4, '小李'); #start 317 end 487 time 2016-12-13 20:26:26
 UPDATE `test`.`tbl` SET `addtime`='2016-12-12 00:00:00', `id`=4, `name`='小李' WHERE `addtime`='2016-12-13 20:26:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 514 end 701 time 2016-12-13 20:27:07
 DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
