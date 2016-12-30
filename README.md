@@ -86,7 +86,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 -K, --no-primary-key 对INSERT语句去除主键。可选。
 
--B, --flashback 生成回滚语句。可选。与stop-never或no-primary-key不能同时添加。
+-B, --flashback 生成回滚语句，可解析大文件，不受内存限制。可选。与stop-never或no-primary-key不能同时添加。
 
 **解析范围控制**
 
@@ -191,13 +191,12 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 
 ###限制
 * mysql server必须开启，离线模式下不能解析
-* flashback模式，生成的回滚语句不能超过内存大小(有待优化，mysqlbinlog有同样的问题)
-
 
 ###优点（对比mysqlbinlog）
 
 * 纯Python开发，安装与使用都很简单
 * 自带flashback、no-primary-key解析模式，无需再装补丁
+* flashback模式下，更适合闪回[实战](./example/mysql-flashback-priciple-and-practice.md)
 * 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
 

@@ -10,7 +10,7 @@ from pymysqlreplication.row_event import (
     DeleteRowsEvent,
 )
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlogevent, create_unique_file
+from binlog2sql_util import command_line_args, concat_sql_from_binlogevent, create_unique_file, reversed_lines
 
 class Binlog2sql(object):
 
@@ -101,10 +101,9 @@ class Binlog2sql(object):
                     break
             ftmp.close()
             if self.flashback:
-                # doesn't work if you can't fit the whole file in memory.
-                # need to be optimized
-                for line in reversed(open(tmpFile).readlines()):
-                    print line.rstrip()
+                with open(tmpFile) as ftmp:
+                    for line in reversed_lines(ftmp):
+                        print line.rstrip()
         finally:
             os.remove(tmpFile)
         cur.close()
