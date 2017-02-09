@@ -72,10 +72,11 @@ def parse_args(args):
                            help='Generate insert sql without primary key if exists', default=False)
     parser.add_argument('-B', '--flashback', dest='flashback', action='store_true',
                            help='Flashback data to start_postition of start_file', default=False)
-    return parser.parse_args(args)
+    return parser
 
 def command_line_args(args):
-    args = parse_args(args)
+    parser = parse_args(args)
+    args = parser.parse_args(args)
     if args.help:
         parser.print_help()
         sys.exit(1)
