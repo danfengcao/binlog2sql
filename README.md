@@ -27,6 +27,7 @@ binlog2sql
 shell> git clone https://github.com/danfengcao/binlog2sql.git && cd binlog2sql
 shell> pip install -r requirements.txt
 ```
+git与pip的安装问题请自行搜索解决。
 
 使用
 =========
@@ -36,8 +37,9 @@ shell> pip install -r requirements.txt
     [mysqld]
     server_id = 1
     log_bin = /var/log/mysql/mysql-bin.log
-    max_binlog_size = 100M
+    max_binlog_size = 1G
     binlog_format = row
+    binlog_row_image = full
 
 ### user需要的最小权限集合：
 
@@ -191,6 +193,7 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 
 ###限制
 * mysql server必须开启，离线模式下不能解析
+* 参数 _binlog\_row\_image_ 必须为FULL，暂不支持MINIMAL
 
 ###优点（对比mysqlbinlog）
 
