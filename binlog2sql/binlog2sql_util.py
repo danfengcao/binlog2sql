@@ -75,9 +75,10 @@ def parse_args(args):
     return parser
 
 def command_line_args(args):
+    needPrintHelp = False if args else True
     parser = parse_args(args)
     args = parser.parse_args(args)
-    if args.help:
+    if args.help or needPrintHelp:
         parser.print_help()
         sys.exit(1)
     if not args.startFile:
