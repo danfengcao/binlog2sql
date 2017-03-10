@@ -100,15 +100,27 @@ class Binlog2sql(object):
                 if flagLastEvent:
                     break
             ftmp.close()
+
             if self.flashback:
-                with open(tmpFile) as ftmp:
-                    for line in reversed_lines(ftmp):
-                        print line.rstrip()
+                self.print_rollback_sql(tmpFile)
         finally:
             os.remove(tmpFile)
         cur.close()
         stream.close()
         return True
+
+    def print_rollback_sql(self, fin):
+        '''print rollback sql from tmpfile'''
+        with open(fin) as ftmp:
+            sleepInterval = 1000
+            i = 0
+            for line in reversed_lines(ftmp):
+                print line.rstrip()
+                if i >= sleepInterval:
+                    print 'SELECT SLEEP(1);'
+                    i = 0
+                else:
+                    i += 1
 
     def __del__(self):
         pass
