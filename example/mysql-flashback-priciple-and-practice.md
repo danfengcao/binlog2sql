@@ -148,7 +148,8 @@ mysql> select count(*) from user;
 
 	```bash
 	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-datetime='2016-12-26 11:44:00' --stop-datetime='2016-12-26 11:50:00' > /tmp/raw.sql
-raw.sql 输出：
+ 
+	raw.sql输出：
 	DELETE FROM `test`.`user` WHERE `addtime`='2014-11-11 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
 	DELETE FROM `test`.`user` WHERE `addtime`='2015-11-11 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
 	...
@@ -161,7 +162,8 @@ raw.sql 输出：
 
 	```bash
 	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-position=257427 --stop-position=504272 -B > /tmp/rollback.sql
-rollback.sql 输出：
+	
+	rollback.sql 输出：
 	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-14 23:09:07', 24530, 'tt'); #start 257427 end 504272 time 2016-12-26 11:44:56
 	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 24529, '小李'); #start 257427 end 504272 time 2016-12-26 11:44:56
 	...
