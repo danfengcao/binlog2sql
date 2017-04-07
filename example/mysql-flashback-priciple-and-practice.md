@@ -170,7 +170,7 @@ mysql> select count(*) from user;
 	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2014-11-11 00:04:48', 2, '小钱'); #start 257427 end 265754 time 2016-12-26 11:44:56
 
 	shell> wc -l /tmp/rollback.sql
-16128 /tmp/rollback.sql
+	16128 /tmp/rollback.sql
 	```
         
 4. 与业务方确认回滚sql没问题，执行回滚语句。登录mysql，确认回滚成功。
