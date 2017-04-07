@@ -54,7 +54,9 @@ git与pip的安装问题请自行搜索解决。
 * super/replication client：两个权限都可以，需要执行'SHOW MASTER STATUS', 获取server端的binlog列表
 * replication slave：通过BINLOG_DUMP协议获取binlog内容的权限
 
-###基本用法
+
+### 基本用法
+
 
 **解析出标准SQL**
 
@@ -77,7 +79,9 @@ shell> python binlog2sql.py --flashback -h127.0.0.1 -P3306 -uadmin -p'admin' -dt
 INSERT INTO `test`.`test3`(`addtime`, `data`, `id`) VALUES ('2016-12-10 13:03:38', 'english', 4); #start 981 end 1147
 UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`=3 WHERE `addtime`='2016-12-10 12:00:00' AND `data`='中文' AND `id`=3 LIMIT 1; #start 763 end 954
 ```
-###选项
+
+### 选项
+
 **mysql连接配置**
 
 -h host; -P port; -u user; -p password
@@ -110,7 +114,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 -t, --tables 只输出目标tables的sql。可选。默认为空。
 
-###应用案例
+### 应用案例
 
 #### **误删整张表数据，需要紧急回滚**
 
@@ -142,38 +146,38 @@ Empty set (0.00 sec)
 1. 登录mysql，查看目前的binlog文件
 
 	```bash
-mysql> show master status;
-+------------------+-----------+
-| Log_name         | File_size |
-+------------------+-----------+
-| mysql-bin.000051 |       967 |
-| mysql-bin.000052 |       965 |
-+------------------+-----------+
-```
+	mysql> show master status;
+	+------------------+-----------+
+	| Log_name         | File_size |
+	+------------------+-----------+
+	| mysql-bin.000051 |       967 |
+	| mysql-bin.000052 |       965 |
+	+------------------+-----------+
+	```
 
 2. 最新的binlog文件是mysql-bin.000052，我们再定位误操作SQL的binlog位置。误操作人只能知道大致的误操作时间，我们根据大致时间过滤数据。
 
 	```bash
-shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-datetime='2016-12-13 20:25:00' --stop-datetime='2016-12-13 20:30:00'
-输出：
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:26:00', 4, '小李'); #start 317 end 487 time 2016-12-13 20:26:26
-UPDATE `test`.`tbl` SET `addtime`='2016-12-12 00:00:00', `id`=4, `name`='小李' WHERE `addtime`='2016-12-13 20:26:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 514 end 701 time 2016-12-13 20:27:07
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-13 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
-DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-12 00:00:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
-```
+	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-datetime='2016-12-13 20:25:00' --stop-datetime='2016-12-13 20:30:00'
+	输出：
+	INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:26:00', 4, '小李'); #start 317 end 487 time 2016-12-13 20:26:26
+	UPDATE `test`.`tbl` SET `addtime`='2016-12-12 00:00:00', `id`=4, `name`='小李' WHERE `addtime`='2016-12-13 20:26:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 514 end 701 time 2016-12-13 20:27:07
+	DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:33' AND `id`=1 AND `name`='小赵' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+	DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-10 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+	DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-13 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+	DELETE FROM `test`.`tbl` WHERE `addtime`='2016-12-12 00:00:00' AND `id`=4 AND `name`='小李' LIMIT 1; #start 728 end 938 time 2016-12-13 20:28:05
+	```
 
 3. 我们得到了误操作sql的准确位置在728-938之间，再根据位置进一步过滤，使用flashback模式生成回滚sql，检查回滚sql是否正确(注：真实环境下，此步经常会进一步筛选出需要的sql。结合grep、编辑器等)
 
 	```bash
-shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-position=3346 --stop-position=3556 -B > rollback.sql | cat
-输出：
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 4, '小李'); #start 728 end 938 time 2016-12-13 20:28:05
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 728 end 938 time 2016-12-13 20:28:05
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 728 end 938 time 2016-12-13 20:28:05
-INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 728 end 938 time 2016-12-13 20:28:05
-```
+	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -ttbl --start-file='mysql-bin.000052' --start-position=3346 --stop-position=3556 -B > rollback.sql | cat
+	输出：
+	INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 4, '小李'); #start 728 end 938 time 2016-12-13 20:28:05
+	INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-13 20:25:00', 3, '小孙'); #start 728 end 938 time 2016-12-13 20:28:05
+	INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:48', 2, '小钱'); #start 728 end 938 time 2016-12-13 20:28:05
+	INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 1, '小赵'); #start 728 end 938 time 2016-12-13 20:28:05
+	```
 
 4. 确认回滚sql正确，执行回滚语句。登录mysql确认，数据回滚成功。
 
@@ -181,21 +185,22 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 	shell> mysql -h127.0.0.1 -P3306 -uadmin -p'admin' < rollback.sql
 
 	mysql> select * from tbl;
-+----+--------+---------------------+
-| id | name   | addtime             |
-+----+--------+---------------------+
-|  1 | 小赵   | 2016-12-10 00:04:33 |
-|  2 | 小钱   | 2016-12-10 00:04:48 |
-|  3 | 小孙   | 2016-12-13 20:25:00 |
-|  4 | 小李   | 2016-12-12 00:00:00 |
-+----+--------+---------------------+
-```
+	+----+--------+---------------------+
+	| id | name   | addtime             |
+	+----+--------+---------------------+
+	|  1 | 小赵   | 2016-12-10 00:04:33 |
+	|  2 | 小钱   | 2016-12-10 00:04:48 |
+	|  3 | 小孙   | 2016-12-13 20:25:00 |
+	|  4 | 小李   | 2016-12-12 00:00:00 |
+	+----+--------+---------------------+
+	```
 
-###限制
+### 限制
+
 * mysql server必须开启，离线模式下不能解析
 * 参数 _binlog\_row\_image_ 必须为FULL，暂不支持MINIMAL
 
-###优点（对比mysqlbinlog）
+### 优点（对比mysqlbinlog）
 
 * 纯Python开发，安装与使用都很简单
 * 自带flashback、no-primary-key解析模式，无需再装补丁
@@ -203,14 +208,15 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 * 解析为标准SQL，方便理解、调试
 * 代码容易改造，可以支持更多个性化解析
 
-###贡献者
+### 贡献者
 
 * danfengcao 维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
 * 大众点评DBA团队 想法交流，使用体验 [dba_op@dianping.com](dba_op@dianping.com)
 * 赵承勇 pymysqlreplication权限bug [https://github.com/imzcy1987](https://github.com/imzcy1987)
 * 陈路炳 bug报告(字段值为空时的处理)，使用体验 [https://github.com/bingluchen](https://github.com/bingluchen)
 
-###联系我
+### 联系我
+
 有任何问题，请与我联系。微信：danfeng053005 邮箱：[danfengcao.info@gmail.com](danfengcao.info@gmail.com)
 
 欢迎提问题提需求，欢迎pull requests！
