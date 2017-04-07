@@ -135,37 +135,37 @@ mysql> select count(*) from user;
 1. 登录mysql，查看目前的binlog文件
 
 	```bash
-mysql> show master logs;
-+------------------+-----------+
-| Log_name         | File_size |
-+------------------+-----------+
-| mysql-bin.000053 | 168652863 |
-| mysql-bin.000054 |    504549 |
-+------------------+-----------+
-```
+	mysql> show master logs;
+	+------------------+-----------+
+	| Log_name         | File_size |
+	+------------------+-----------+
+	| mysql-bin.000053 | 168652863 |
+	| mysql-bin.000054 |    504549 |
+	+------------------+-----------+
+	```
 
 2. 最新的binlog文件是mysql-bin.000054。我们的目标是筛选出需要回滚的SQL，由于误操作人只知道大致的误操作时间，我们首先根据时间做一次过滤。只需要解析test库user表。(注：如果有多个sql误操作，则生成的binlog可能分布在多个文件，需解析多个文件)
 
 	```bash
-shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-datetime='2016-12-26 11:44:00' --stop-datetime='2016-12-26 11:50:00' > /tmp/raw.sql
+	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-datetime='2016-12-26 11:44:00' --stop-datetime='2016-12-26 11:50:00' > /tmp/raw.sql
 raw.sql 输出：
-DELETE FROM `test`.`user` WHERE `addtime`='2014-11-11 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
-DELETE FROM `test`.`user` WHERE `addtime`='2015-11-11 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
-...
-DELETE FROM `test`.`user` WHERE `addtime`='2016-12-14 23:09:07' AND `id`=24530 AND `name`='tt' LIMIT 1; #start 257427 end 504272 time 2016-12-26 11:44:56
-INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 32722, '小王'); #start 504299 end 504522 time 2016-12-26 11:49:42
-...
-```
+	DELETE FROM `test`.`user` WHERE `addtime`='2014-11-11 00:04:48' AND `id`=2 AND `name`='小钱' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
+	DELETE FROM `test`.`user` WHERE `addtime`='2015-11-11 20:25:00' AND `id`=3 AND `name`='小孙' LIMIT 1; #start 257427 end 265754 time 2016-12-26 11:44:56
+	...
+	DELETE FROM `test`.`user` WHERE `addtime`='2016-12-14 23:09:07' AND `id`=24530 AND `name`='tt' LIMIT 1; #start 257427 end 504272 time 2016-12-26 11:44:56
+	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33', 32722, '小王'); #start 504299 end 504522 time 2016-12-26 11:49:42
+	...
+	```
 
 3. 根据位置信息，我们确定了误操作sql来自同一个事务，准确位置在257427-504272之间(binlog2sql对于同一个事务会输出同样的start position)。再根据位置过滤，使用 _**-B**_ 选项生成回滚sql，检查回滚sql是否正确。(注：真实场景下，生成的回滚SQL经常会需要进一步筛选。结合grep、编辑器等)
 
 	```bash
-shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-position=257427 --stop-position=504272 -B > /tmp/rollback.sql
+	shell> python binlog2sql/binlog2sql.py -h127.0.0.1 -P3306 -uadmin -p'admin' -dtest -tuser --start-file='mysql-bin.000054' --start-position=257427 --stop-position=504272 -B > /tmp/rollback.sql
 rollback.sql 输出：
-INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-14 23:09:07', 24530, 'tt'); #start 257427 end 504272 time 2016-12-26 11:44:56
-INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 24529, '小李'); #start 257427 end 504272 time 2016-12-26 11:44:56
-...
-INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2014-11-11 00:04:48', 2, '小钱'); #start 257427 end 265754 time 2016-12-26 11:44:56
+	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-14 23:09:07', 24530, 'tt'); #start 257427 end 504272 time 2016-12-26 11:44:56
+	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2016-12-12 00:00:00', 24529, '小李'); #start 257427 end 504272 time 2016-12-26 11:44:56
+	...
+	INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2014-11-11 00:04:48', 2, '小钱'); #start 257427 end 265754 time 2016-12-26 11:44:56
 
 	shell> wc -l /tmp/rollback.sql
 16128 /tmp/rollback.sql
@@ -177,14 +177,15 @@ INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2014-11-11 00:04:48'
 	shell> mysql -h127.0.0.1 -P3306 -uadmin -p'admin' < /tmp/rollback.sql
 
 	mysql> select count(*) from user;
-+----------+
-| count(*) |
-+----------+
-|    16389 |
-+----------+
-```
+	+----------+
+	| count(*) |
+	+----------+
+	|    16389 |
+	+----------+
+	```
 
-###TIPS
+### TIPS
+
 * 闪回的关键是快速筛选出真正需要回滚的SQL。
 * 先根据库、表、时间做一次过滤，再根据位置做更准确的过滤。
 * 由于数据一直在写入，要确保回滚sql中不包含其他数据。可根据是否是同一事务、误操作行数、字段值的特征等等来帮助判断。
@@ -192,15 +193,17 @@ INSERT INTO `test`.`user`(`addtime`, `id`, `name`) VALUES ('2014-11-11 00:04:48'
 * 如果待回滚的表与其他表有关联，要与开发说明回滚和不回滚各自的副作用，再确定方案。
 * 回滚后数据变化，可能对用户和线上应用造成困惑(类似幻读)。
 
-####再重复下最重要的两点：**筛选出正确SQL**！**沟通清楚**！
+#### 再重复下最重要的两点：**筛选出正确SQL**！**沟通清楚**！
 
 闪回工具
 ===
+
 MySQL闪回特性最早由阿里彭立勋开发，彭在2012年给官方提交了一个patch，并对[闪回设计思路](http://www.penglixun.com/tech/database/mysql_flashback_feature.html)做了说明(设计思路很有启发性，强烈推荐阅读)。但是因为种种原因，业内安装这个patch的团队至今还是少数，真正应用到线上的更是少之又少。彭之后，又有多位人员针对不同mysql版本不同语言开发了闪回工具，原理用的都是彭的思路。
 
 我将这些闪回工具按实现方式分成了三类。
 
 * 第一类是以patch形式集成到官方工具mysqlbinlog中。以彭提交的patch为代表。
+
 	> 优点
 	>
 	> * 上手成本低。mysqlbinlog原有的选项都能直接利用，只是多加了一个闪回选项。闪回特性未来有可能被官方收录。
@@ -215,6 +218,7 @@ MySQL闪回特性最早由阿里彭立勋开发，彭在2012年给官方提交�
 	> 这些缺点，可能都是闪回没有流行开来的原因。
 
 * 第二类是独立工具，通过伪装成slave拉取binlog来进行处理。以binlog2sql为代表。
+
 	> 优点
 	>
 	> * 兼容性好。伪装成slave拉binlog这项技术在业界应用的非常广泛，多个开发语言都有这样的活跃项目，MySQL版本的兼容性由这些项目搞定，闪回工具的兼容问题不再突出。
@@ -226,6 +230,7 @@ MySQL闪回特性最早由阿里彭立勋开发，彭在2012年给官方提交�
 	> * 必须开启MySQL server。
 
 * 第三类是简单脚本。先用mysqlbinlog解析出文本格式的binlog，再根据回滚原理用正则进行匹配并替换。
+
 	> 优点
 	>
 	> * 脚本写起来方便，往往能快速搞定某个特定问题。
@@ -240,7 +245,8 @@ MySQL闪回特性最早由阿里彭立勋开发，彭在2012年给官方提交�
 就目前的闪回工具而言，线上环境的闪回，笔者建议使用binlog2sql，离线解析使用mysqlbinlog。
 
 
-###关于DDL的flashback
+### 关于DDL的flashback
+
 本文所述的flashback仅针对DML语句的快速回滚。但如果误操作是DDL的话，是无法利用binlog做快速回滚的，因为即使在row模式下，binlog对于DDL操作也不会记录每行数据的变化。要实现DDL快速回滚，必须修改MySQL源码，使得在执行DDL前先备份老数据。目前有多个mysql定制版本实现了DDL闪回特性，阿里林晓斌团队提交了patch给MySQL官方，MariaDB预计在不久后加入包含DDL的flashback特性。DDL闪回的副作用是会增加额外存储。考虑到其应用频次实在过低，本文不做详述，有兴趣的同学可以自己去了解，重要的几篇文章我在参考资料中做了引用。
 
 
@@ -249,6 +255,7 @@ MySQL闪回特性最早由阿里彭立勋开发，彭在2012年给官方提交�
 
 参考资料
 ==============
+
 [1] MySQL Internals Manual
 , [Chapter 20 The Binary Log](http://dev.mysql.com/doc/internals/en/binary-log.html)
 
