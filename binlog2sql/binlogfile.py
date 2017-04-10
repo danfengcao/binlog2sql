@@ -82,8 +82,6 @@ class BinLogFileReader(object):
         self.__allowed_events_in_packet = frozenset(
             [TableMapEvent, RotateEvent]).union(self.__allowed_events)
 
-        self.__use_checksum = self.__checksum_enabled()
-
         # Store table meta information
         self.table_map = {}
         self.log_pos = log_pos
@@ -99,6 +97,9 @@ class BinLogFileReader(object):
             self.pymysql_wrapper = pymysql_wrapper
         else:
             self.pymysql_wrapper = pymysql.connect
+
+        # checksum with database
+        self.__use_checksum = self.__checksum_enabled()
 
     def close(self):
         if self._file:
@@ -119,17 +120,21 @@ class BinLogFileReader(object):
     def __checksum_enabled(self):
         """Return True if binlog-checksum = CRC32. Only for MySQL > 5.6"""
         try:
-            self._ctl_connection.execute("SHOW GLOBAL VARIABLES LIKE 'BINLOG_CHECKSUM'")
-            result = self._ctl_connection.fetchone()
+            if not self.__connected_ctl and self._ctl_connection_settings:
+                self.__connect_to_ctl()
 
-            if result is None:
+            cur = self._ctl_connection.cursor()
+            cur.execute("SHOW GLOBAL VARIABLES LIKE 'BINLOG_CHECKSUM'")
+            _result = cur.fetchone()
+            cur.close()
+            if _result is None:
                 return False
-            var, value = result[:2]
+            value = _result.get('Value', 'NONE')
             if value == 'NONE':
                 return False
             return True
         except Exception:
-            return True
+            return False
 
     def __connect_to_stream(self):
         if self._file is None:
