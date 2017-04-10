@@ -215,3 +215,13 @@ INSERT INTO `test`.`tbl`(`addtime`, `id`, `name`) VALUES ('2016-12-10 00:04:33',
 
 欢迎提问题提需求，欢迎pull requests！
 
+
+bin2sql
+========================
+
+Usage:
+
+```bash
+python bin2sql.py -h 127.0.0.1 --start-datetime='2017-04-05 21:44:54' --stop-datetime='2017-04-05 21:45:00' -f mysql-bin.000001
+```
+
