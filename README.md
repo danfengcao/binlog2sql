@@ -195,10 +195,11 @@ Empty set (0.00 sec)
 	+----+--------+---------------------+
 	```
 
-### 限制
+### 限制（对比mysqlbinlog）
 
 * mysql server必须开启，离线模式下不能解析
 * 参数 _binlog\_row\_image_ 必须为FULL，暂不支持MINIMAL
+* 解析速度不如mysqlbinlog
 
 ### 优点（对比mysqlbinlog）
 
