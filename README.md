@@ -92,7 +92,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 -K, --no-primary-key 对INSERT语句去除主键。可选。
 
--B, --flashback 生成回滚语句，可解析大文件，不受内存限制，每打印一千行加一句SLEEP SELECT(1)。可选。与stop-never或no-primary-key不能同时添加。
+-B, --flashback 生成回滚语句，可解析大文件，不受内存限制，每打印一千行加一句SELECT SLEEP(1)。可选。与stop-never或no-primary-key不能同时添加。
 
 **解析范围控制**
 
