@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os, sys, argparse, datetime
-import pymysql
-from pymysqlreplication import BinLogStreamReader
+import os
+import sys
+import argparse
+import datetime
 from pymysqlreplication.row_event import (
     WriteRowsEvent,
     UpdateRowsEvent,
     DeleteRowsEvent,
 )
-from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
+from pymysqlreplication.event import QueryEvent
 
 
 def is_valid_datetime(string):
@@ -19,23 +20,25 @@ def is_valid_datetime(string):
     except:
         return False
 
+
 def create_unique_file(filename):
     version = 0
-    resultFile = filename
+    result_file = filename
     # if we have to try more than 1000 times, something is seriously wrong
-    while os.path.exists(resultFile) and version<1000:
-        resultFile = filename + '.' + str(version)
+    while os.path.exists(result_file) and version < 1000:
+        result_file = filename + '.' + str(version)
         version += 1
     if version >= 1000:
         raise OSError('cannot create unique file %s.[0-1000]' % filename)
-    return resultFile
+    return result_file
 
-def parse_args(args):
+
+def parse_args():
     """parse args for binlog2sql"""
 
     parser = argparse.ArgumentParser(description='Parse MySQL binlog to SQL you want', add_help=False)
     connect_setting = parser.add_argument_group('connect setting')
-    connect_setting.add_argument('-h','--host', dest='host', type=str,
+    connect_setting.add_argument('-h', '--host', dest='host', type=str,
                                  help='Host the MySQL database server located', default='127.0.0.1')
     connect_setting.add_argument('-u', '--user', dest='user', type=str,
                                  help='MySQL Username to log in as', default='root')
@@ -43,23 +46,31 @@ def parse_args(args):
                                  help='MySQL Password to use', default='')
     connect_setting.add_argument('-P', '--port', dest='port', type=int,
                                  help='MySQL port to use', default=3306)
-    range = parser.add_argument_group('range filter')
-    range.add_argument('--start-file', dest='startFile', type=str,
-                       help='Start binlog file to be parsed')
-    range.add_argument('--start-position', '--start-pos', dest='startPos', type=int,
-                       help='Start position of the --start-file', default=4)
-    range.add_argument('--stop-file', '--end-file', dest='endFile', type=str,
-                       help="Stop binlog file to be parsed. default: '--start-file'", default='')
-    range.add_argument('--stop-position', '--end-pos', dest='endPos', type=int,
-                       help="Stop position of --stop-file. default: latest position of '--stop-file'", default=0)
-    range.add_argument('--start-datetime', dest='startTime', type=str,
-                       help="Start reading the binlog at first event having a datetime equal or posterior to the argument; the argument must be a date and time in the local time zone, in any format accepted by the MySQL server for DATETIME and TIMESTAMP types, for example: 2004-12-25 11:25:56 (you should probably use quotes for your shell to set it properly).", default='')
-    range.add_argument('--stop-datetime', dest='stopTime', type=str,
-                       help="Stop reading the binlog at first event having a datetime equal or posterior to the argument; the argument must be a date and time in the local time zone, in any format accepted by the MySQL server for DATETIME and TIMESTAMP types, for example: 2004-12-25 11:25:56 (you should probably use quotes for your shell to set it properly).", default='')
-    parser.add_argument('--stop-never', dest='stopnever', action='store_true',
-                        help='Wait for more data from the server. default: stop replicate at the last binlog when you start binlog2sql', default=False)
+    interval = parser.add_argument_group('interval filter')
+    interval.add_argument('--start-file', dest='start_file', type=str, help='Start binlog file to be parsed')
+    interval.add_argument('--start-position', '--start-pos', dest='start_pos', type=int,
+                          help='Start position of the --start-file', default=4)
+    interval.add_argument('--stop-file', '--end-file', dest='end_file', type=str,
+                          help="Stop binlog file to be parsed. default: '--start-file'", default='')
+    interval.add_argument('--stop-position', '--end-pos', dest='end_pos', type=int,
+                          help="Stop position. default: latest position of '--stop-file'", default=0)
+    interval.add_argument('--start-datetime', dest='start_time', type=str,
+                          help="Start reading the binlog at first event having a datetime equal or posterior "
+                               "to the argument; the argument must be a date and time in the local time zone,"
+                               " in any format accepted by the MySQL server for DATETIME and TIMESTAMP types,"
+                               " for example: 2004-12-25 11:25:56 (you should probably use quotes for your "
+                               "shell to set it properly).", default='')
+    interval.add_argument('--stop-datetime', dest='stop_time', type=str,
+                          help="Stop reading the binlog at first event having a datetime equal or posterior "
+                               "to the argument; the argument must be a date and time in the local time zone,"
+                               " in any format accepted by the MySQL server for DATETIME and TIMESTAMP types,"
+                               " for example: 2004-12-25 11:25:56 (you should probably use quotes for your "
+                               "shell to set it properly).", default='')
+    parser.add_argument('--stop-never', dest='stop_never', action='store_true',
+                        help="Wait for more data from the server. default: stop replicate at the last binlog"
+                             " when you start binlog2sql", default=False)
 
-    parser.add_argument('--help', dest='help', action='store_true', help='help infomation', default=False)
+    parser.add_argument('--help', dest='help', action='store_true', help='help information', default=False)
 
     schema = parser.add_argument_group('schema filter')
     schema.add_argument('-d', '--databases', dest='databases', type=str, nargs='*',
@@ -68,26 +79,28 @@ def parse_args(args):
                         help='tables you want to process', default='')
 
     # exclusive = parser.add_mutually_exclusive_group()
-    parser.add_argument('-K', '--no-primary-key', dest='nopk', action='store_true',
-                           help='Generate insert sql without primary key if exists', default=False)
+    parser.add_argument('-K', '--no-primary-key', dest='no_pk', action='store_true',
+                        help='Generate insert sql without primary key if exists', default=False)
     parser.add_argument('-B', '--flashback', dest='flashback', action='store_true',
-                           help='Flashback data to start_postition of start_file', default=False)
+                        help='Flashback data to start_position of start_file', default=False)
     return parser
 
+
 def command_line_args(args):
-    needPrintHelp = False if args else True
-    parser = parse_args(args)
+    need_print_help = False if args else True
+    parser = parse_args()
     args = parser.parse_args(args)
-    if args.help or needPrintHelp:
+    if args.help or need_print_help:
         parser.print_help()
         sys.exit(1)
-    if not args.startFile:
-        raise ValueError('Lack of parameter: startFile')
-    if args.flashback and args.stopnever:
+    if not args.start_file:
+        raise ValueError('Lack of parameter: start_file')
+    if args.flashback and args.stop_never:
         raise ValueError('Only one of flashback or stop-never can be True')
-    if args.flashback and args.nopk:
-        raise ValueError('Only one of flashback or nopk can be True')
-    if (args.startTime and not is_valid_datetime(args.startTime)) or (args.stopTime and not is_valid_datetime(args.stopTime)):
+    if args.flashback and args.no_pk:
+        raise ValueError('Only one of flashback or no_pk can be True')
+    if (args.start_time and not is_valid_datetime(args.start_time)) or \
+            (args.stop_time and not is_valid_datetime(args.stop_time)):
         raise ValueError('Incorrect datetime argument')
     return args
 
@@ -99,6 +112,7 @@ def compare_items((k, v)):
     else:
         return '`%s`=%%s' % k
 
+
 def fix_object(value):
     """Fixes python objects so that they can be properly inserted into SQL queries"""
     if isinstance(value, unicode):
@@ -106,96 +120,103 @@ def fix_object(value):
     else:
         return value
 
-def concat_sql_from_binlogevent(cursor, binlogevent, row=None, eStartPos=None, flashback=False, nopk=False):
-    if flashback and nopk:
-        raise ValueError('only one of flashback or nopk can be True')
-    if not (isinstance(binlogevent, WriteRowsEvent) or isinstance(binlogevent, UpdateRowsEvent) or isinstance(binlogevent, DeleteRowsEvent) or isinstance(binlogevent, QueryEvent)):
-        raise ValueError('binlogevent must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
+
+def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
+    if flashback and no_pk:
+        raise ValueError('only one of flashback or no_pk can be True')
+    if not (isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent)
+            or isinstance(binlog_event, DeleteRowsEvent) or isinstance(binlog_event, QueryEvent)):
+        raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
     sql = ''
-    if isinstance(binlogevent, WriteRowsEvent) or isinstance(binlogevent, UpdateRowsEvent) or isinstance(binlogevent, DeleteRowsEvent):
-        pattern = generate_sql_pattern(binlogevent, row=row, flashback=flashback, nopk=nopk)
+    if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
+            or isinstance(binlog_event, DeleteRowsEvent):
+        pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
-        sql += ' #start %s end %s time %s' % (eStartPos, binlogevent.packet.log_pos, datetime.datetime.fromtimestamp(binlogevent.timestamp))
-    elif flashback is False and isinstance(binlogevent, QueryEvent) and binlogevent.query != 'BEGIN' and binlogevent.query != 'COMMIT':
-        if binlogevent.schema:
-            sql = 'USE {0};\n'.format(binlogevent.schema)
-        sql += '{0};'.format(fix_object(binlogevent.query))
+        time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
+        sql += ' #start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
+    elif flashback is False and isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
+            and binlog_event.query != 'COMMIT':
+        if binlog_event.schema:
+            sql = 'USE {0};\n'.format(binlog_event.schema)
+        sql += '{0};'.format(fix_object(binlog_event.query))
 
     return sql
 
-def generate_sql_pattern(binlogevent, row=None, flashback=False, nopk=False):
+
+def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
     template = ''
     values = []
     if flashback is True:
-        if isinstance(binlogevent, WriteRowsEvent):
+        if isinstance(binlog_event, WriteRowsEvent):
             template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
-                binlogevent.schema, binlogevent.table,
+                binlog_event.schema, binlog_event.table,
                 ' AND '.join(map(compare_items, row['values'].items()))
             )
             values = map(fix_object, row['values'].values())
-        elif isinstance(binlogevent, DeleteRowsEvent):
+        elif isinstance(binlog_event, DeleteRowsEvent):
             template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                binlogevent.schema, binlogevent.table,
-                ', '.join(map(lambda k: '`%s`'%k, row['values'].keys())),
+                binlog_event.schema, binlog_event.table,
+                ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                 ', '.join(['%s'] * len(row['values']))
             )
             values = map(fix_object, row['values'].values())
-        elif isinstance(binlogevent, UpdateRowsEvent):
+        elif isinstance(binlog_event, UpdateRowsEvent):
             template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
-                binlogevent.schema, binlogevent.table,
-                ', '.join(['`%s`=%%s'%k for k in row['before_values'].keys()]),
+                binlog_event.schema, binlog_event.table,
+                ', '.join(['`%s`=%%s' % x for x in row['before_values'].keys()]),
                 ' AND '.join(map(compare_items, row['after_values'].items())))
             values = map(fix_object, row['before_values'].values()+row['after_values'].values())
     else:
-        if isinstance(binlogevent, WriteRowsEvent):
-            if nopk:
-                # print binlogevent.__dict__
-                # tableInfo = (binlogevent.table_map)[binlogevent.table_id]
+        if isinstance(binlog_event, WriteRowsEvent):
+            if no_pk:
+                # print binlog_event.__dict__
+                # tableInfo = (binlog_event.table_map)[binlog_event.table_id]
                 # if tableInfo.primary_key:
                 #     row['values'].pop(tableInfo.primary_key)
-                if binlogevent.primary_key:
-                    row['values'].pop(binlogevent.primary_key)
+                if binlog_event.primary_key:
+                    row['values'].pop(binlog_event.primary_key)
 
             template = 'INSERT INTO `{0}`.`{1}`({2}) VALUES ({3});'.format(
-                binlogevent.schema, binlogevent.table,
-                ', '.join(map(lambda k: '`%s`'%k, row['values'].keys())),
+                binlog_event.schema, binlog_event.table,
+                ', '.join(map(lambda key: '`%s`' % key, row['values'].keys())),
                 ', '.join(['%s'] * len(row['values']))
             )
             values = map(fix_object, row['values'].values())
-        elif isinstance(binlogevent, DeleteRowsEvent):
-            template ='DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
-                binlogevent.schema, binlogevent.table,
-                ' AND '.join(map(compare_items, row['values'].items()))
-            )
+        elif isinstance(binlog_event, DeleteRowsEvent):
+            template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
+                binlog_event.schema, binlog_event.table, ' AND '.join(map(compare_items, row['values'].items())))
             values = map(fix_object, row['values'].values())
-        elif isinstance(binlogevent, UpdateRowsEvent):
+        elif isinstance(binlog_event, UpdateRowsEvent):
             template = 'UPDATE `{0}`.`{1}` SET {2} WHERE {3} LIMIT 1;'.format(
-                binlogevent.schema, binlogevent.table,
-                ', '.join(['`%s`=%%s'%k for k in row['after_values'].keys()]),
+                binlog_event.schema, binlog_event.table,
+                ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
                 ' AND '.join(map(compare_items, row['before_values'].items()))
             )
             values = map(fix_object, row['after_values'].values()+row['before_values'].values())
 
-    return {'template':template, 'values':values}
+    return {'template': template, 'values': values}
 
-def reversed_lines(file):
-    "Generate the lines of file in reverse order."
+
+def reversed_lines(fin):
+    """Generate the lines of file in reverse order."""
     part = ''
-    for block in reversed_blocks(file):
+    for block in reversed_blocks(fin):
         for c in reversed(block):
             if c == '\n' and part:
                 yield part[::-1]
                 part = ''
             part += c
-    if part: yield part[::-1]
+    if part:
+        yield part[::-1]
 
-def reversed_blocks(file, blocksize=4096):
-    "Generate blocks of file's contents in reverse order."
-    file.seek(0, os.SEEK_END)
-    here = file.tell()
+
+def reversed_blocks(fin, block_size=4096):
+    """Generate blocks of file's contents in reverse order."""
+    fin.seek(0, os.SEEK_END)
+    here = fin.tell()
     while 0 < here:
-        delta = min(blocksize, here)
+        delta = min(block_size, here)
         here -= delta
-        file.seek(here, os.SEEK_SET)
-        yield file.read(delta)
+        fin.seek(here, os.SEEK_SET)
+        yield fin.read(delta)
