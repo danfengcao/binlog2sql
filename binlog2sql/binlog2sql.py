@@ -5,20 +5,16 @@ import sys
 import datetime
 import pymysql
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.row_event import (
-    WriteRowsEvent,
-    UpdateRowsEvent,
-    DeleteRowsEvent,
-)
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines
+from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, \
+    reversed_lines, is_dml_event, event_type
 
 
 class Binlog2sql(object):
 
     def __init__(self, connection_settings, start_file=None, start_pos=None, end_file=None, end_pos=None,
                  start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
-                 flashback=False, stop_never=False, back_interval=1.0):
+                 flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None):
         """
         conn_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
         """
@@ -43,6 +39,8 @@ class Binlog2sql(object):
         self.only_schemas = only_schemas if only_schemas else None
         self.only_tables = only_tables if only_tables else None
         self.no_pk, self.flashback, self.stop_never, self.back_interval = (no_pk, flashback, stop_never, back_interval)
+        self.only_dml = only_dml
+        self.sql_type = [t.upper() for t in sql_type] if sql_type else []
 
         self.binlogList = []
         self.connection = pymysql.connect(**self.conn_setting)
@@ -98,13 +96,12 @@ class Binlog2sql(object):
                 if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
                     e_start_pos = last_pos
 
-                if isinstance(binlog_event, QueryEvent):
+                if isinstance(binlog_event, QueryEvent) and not self.only_dml:
                     sql = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event,
                                                        flashback=self.flashback, no_pk=self.no_pk)
                     if sql:
                         print(sql)
-                elif isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) or\
-                        isinstance(binlog_event, DeleteRowsEvent):
+                elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
                     for row in binlog_event.rows:
                         sql = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event, no_pk=self.no_pk,
                                                            row=row, flashback=self.flashback, e_start_pos=e_start_pos)
@@ -138,7 +135,6 @@ class Binlog2sql(object):
                 else:
                     i += 1
 
-
     def __del__(self):
         pass
 
@@ -150,5 +146,5 @@ if __name__ == '__main__':
                             end_file=args.end_file, end_pos=args.end_pos, start_time=args.start_time,
                             stop_time=args.stop_time, only_schemas=args.databases, only_tables=args.tables,
                             no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
-                            back_interval=args.back_interval)
+                            back_interval=args.back_interval, only_dml=args.only_dml, sql_type=args.sql_type)
     binlog2sql.process_binlog()

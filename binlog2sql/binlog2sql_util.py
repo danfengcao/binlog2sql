@@ -71,20 +71,11 @@ def parse_args():
     interval.add_argument('--stop-position', '--end-pos', dest='end_pos', type=int,
                           help="Stop position. default: latest position of '--stop-file'", default=0)
     interval.add_argument('--start-datetime', dest='start_time', type=str,
-                          help="Start reading the binlog at first event having a datetime equal or posterior "
-                               "to the argument; the argument must be a date and time in the local time zone,"
-                               " in any format accepted by the MySQL server for DATETIME and TIMESTAMP types,"
-                               " for example: 2004-12-25 11:25:56 (you should probably use quotes for your "
-                               "shell to set it properly).", default='')
+                          help="Start time. format %%Y-%%m-%%d %%H:%%M:%%S", default='')
     interval.add_argument('--stop-datetime', dest='stop_time', type=str,
-                          help="Stop reading the binlog at first event having a datetime equal or posterior "
-                               "to the argument;", default='')
-    parser.add_argument('--stop-never', dest='stop_never', action='store_true',
-                        help="Wait for more data from the server. default: stop replicate at the last binlog "
-                             "when you start binlog2sql", default=False)
-    parser.add_argument('--back-interval', dest='back_interval', type=float,
-                        help="Sleep time between chunks of 1000 rollback sql. If you do not need sleep between chunks, "
-                             " set it to 0", default=1.0)
+                          help="Stop Time. format %%Y-%%m-%%d %%H:%%M:%%S;", default='')
+    parser.add_argument('--stop-never', dest='stop_never', action='store_true', default=False,
+                        help="Continuously parse binlog. default: stop at the latest event when you start.")
     parser.add_argument('--help', dest='help', action='store_true', help='help information', default=False)
 
     schema = parser.add_argument_group('schema filter')
@@ -93,11 +84,19 @@ def parse_args():
     schema.add_argument('-t', '--tables', dest='tables', type=str, nargs='*',
                         help='tables you want to process', default='')
 
+    event = parser.add_argument_group('type filter')
+    event.add_argument('--only-dml', dest='only_dml', action='store_true', default=True,
+                       help='only print dml, ignore ddl')
+    event.add_argument('--sql-type', dest='sql_type', type=str, nargs='*', default=['INSERT', 'UPDATE', 'DELETE'],
+                       help='Sql type you want to process, support INSERT, UPDATE, DELETE.')
+
     # exclusive = parser.add_mutually_exclusive_group()
     parser.add_argument('-K', '--no-primary-key', dest='no_pk', action='store_true',
                         help='Generate insert sql without primary key if exists', default=False)
     parser.add_argument('-B', '--flashback', dest='flashback', action='store_true',
                         help='Flashback data to start_position of start_file', default=False)
+    parser.add_argument('--back-interval', dest='back_interval', type=float, default=1.0,
+                        help="Sleep time between chunks of 1000 rollback sql. set it to 0 if do not need sleep")
     return parser
 
 
@@ -137,6 +136,24 @@ def fix_object(value):
         return value.encode('utf-8')
     else:
         return value
+
+
+def is_dml_event(event):
+    if isinstance(event, WriteRowsEvent) or isinstance(event, UpdateRowsEvent) or isinstance(event, DeleteRowsEvent):
+        return True
+    else:
+        return False
+
+
+def event_type(event):
+    t = None
+    if isinstance(event, WriteRowsEvent):
+        t = 'INSERT'
+    elif isinstance(event, UpdateRowsEvent):
+        t = 'UPDATE'
+    elif isinstance(event, DeleteRowsEvent):
+        t = 'DELETE'
+    return t
 
 
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):

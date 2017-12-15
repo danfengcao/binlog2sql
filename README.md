@@ -88,34 +88,37 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 **解析模式**
 
---stop-never 持续同步binlog。可选。不加则同步至执行命令时最新的binlog位置。
+--stop-never 持续解析binlog。可选。，默认False，同步至执行命令时最新的binlog位置。
 
--K, --no-primary-key 对INSERT语句去除主键。可选。
+-K, --no-primary-key 对INSERT语句去除主键。可选。默认False
 
--B, --flashback 生成回滚语句，可解析大文件，不受内存限制。可选。与stop-never或no-primary-key不能同时添加。
+-B, --flashback 生成回滚SQL，可解析大文件，不受内存限制。可选。默认False。与stop-never或no-primary-key不能同时添加。
 
---back-interval -B模式下，每打印一千行回滚语句，加一句SLEEP多少秒，如果不需要SLEEP，请设为0。可选。默认1.0。
+--back-interval -B模式下，每打印一千行回滚SQL，加一句SLEEP多少秒，如不想加SLEEP，请设为0。可选。默认1.0。
 
 **解析范围控制**
 
 --start-file 起始解析文件，只需文件名，无需全路径 。必须。
 
---start-position/--start-pos start-file的起始解析位置。可选。默认为start-file的起始位置。
+--start-position/--start-pos 起始解析位置。可选。默认为start-file的起始位置。
 
---stop-file/--end-file 末尾解析文件。可选。默认为start-file同一个文件。若解析模式为stop-never，此选项失效。
+--stop-file/--end-file 终止解析文件。可选。默认为start-file同一个文件。若解析模式为stop-never，此选项失效。
 
---stop-position/--end-pos stop-file的末尾解析位置。可选。默认为stop-file的最末位置；若解析模式为stop-never，此选项失效。
+--stop-position/--end-pos 终止解析位置。可选。默认为stop-file的最末位置；若解析模式为stop-never，此选项失效。
 
---start-datetime 从哪个时间点的binlog开始解析，格式必须为datetime，如'2016-11-11 11:11:11'。可选。默认不过滤。
+--start-datetime 起始解析时间，格式'%Y-%m-%d %H:%M:%S'。可选。默认不过滤。
 
---stop-datetime 到哪个时间点的binlog停止解析，格式必须为datetime，如'2016-11-11 11:11:11'。可选。默认不过滤。
+--stop-datetime 终止解析时间，格式'%Y-%m-%d %H:%M:%S'。可选。默认不过滤。
 
 **对象过滤**
 
--d, --databases 只输出目标db的sql。可选。默认为空。
+-d, --databases 只解析目标db的sql，多个库用空格隔开，如-d db1 db2。可选。默认为空。
 
--t, --tables 只输出目标tables的sql。可选。默认为空。
+-t, --tables 只解析目标table的sql，多张表用空格隔开，如-t tbl1 tbl2。可选。默认为空。
 
+--only-dml 只解析dml，忽略ddl。可选。默认TRUE。
+
+--sql-type 只解析指定类型，支持INSERT, UPDATE, DELETE。多个类型用空格隔开，如--sql-type INSERT DELETE。可选。默认为增删改都解析。用了此参数但没填任何类型，则三者都不解析。
 
 ### 应用案例
 
@@ -209,12 +212,12 @@ Empty set (0.00 sec)
 * 纯Python开发，安装与使用都很简单
 * 自带flashback、no-primary-key解析模式，无需再装补丁
 * flashback模式下，更适合闪回[实战](./example/mysql-flashback-priciple-and-practice.md)
-* 解析为标准SQL，方便理解、调试
+* 解析为标准SQL，方便理解、筛选
 * 代码容易改造，可以支持更多个性化解析
 
 ### 贡献者
 
-* danfengcao 维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
+* danfengcao 作者，维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
 * 大众点评DBA团队 想法交流，使用体验 [dba_op@dianping.com](dba_op@dianping.com)
 * 赵承勇 pymysqlreplication权限bug [https://github.com/imzcy1987](https://github.com/imzcy1987)
 * 陈路炳 bug报告(字段值为空时的处理)，使用体验 [https://github.com/bingluchen](https://github.com/bingluchen)
