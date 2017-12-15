@@ -5,12 +5,18 @@ import os
 import sys
 import argparse
 import datetime
+from contextlib import contextmanager
 from pymysqlreplication.row_event import (
     WriteRowsEvent,
     UpdateRowsEvent,
     DeleteRowsEvent,
 )
 from pymysqlreplication.event import QueryEvent
+
+if sys.version > '3':
+    PY3PLUS = True
+else:
+    PY3PLUS = False
 
 
 def is_valid_datetime(string):
@@ -31,6 +37,16 @@ def create_unique_file(filename):
     if version >= 1000:
         raise OSError('cannot create unique file %s.[0-1000]' % filename)
     return result_file
+
+
+@contextmanager
+def temp_open(filename, mode):
+    f = open(filename, mode)
+    try:
+        yield f
+    finally:
+        f.close()
+        os.remove(filename)
 
 
 def parse_args():
@@ -105,8 +121,9 @@ def command_line_args(args):
     return args
 
 
-def compare_items((k, v)):
-    #caution: if v is NULL, may need to process
+def compare_items(items):
+    # caution: if v is NULL, may need to process
+    (k, v) = items
     if v is None:
         return '`%s` IS %%s' % k
     else:
@@ -115,7 +132,9 @@ def compare_items((k, v)):
 
 def fix_object(value):
     """Fixes python objects so that they can be properly inserted into SQL queries"""
-    if isinstance(value, unicode):
+    if PY3PLUS and isinstance(value, bytes):
+        return value.decode('utf-8')
+    elif not PY3PLUS and isinstance(value, unicode):
         return value.encode('utf-8')
     else:
         return value
@@ -166,7 +185,7 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
                 binlog_event.schema, binlog_event.table,
                 ', '.join(['`%s`=%%s' % x for x in row['before_values'].keys()]),
                 ' AND '.join(map(compare_items, row['after_values'].items())))
-            values = map(fix_object, row['before_values'].values()+row['after_values'].values())
+            values = map(fix_object, list(row['before_values'].values())+list(row['after_values'].values()))
     else:
         if isinstance(binlog_event, WriteRowsEvent):
             if no_pk:
@@ -193,15 +212,31 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
                 ', '.join(['`%s`=%%s' % k for k in row['after_values'].keys()]),
                 ' AND '.join(map(compare_items, row['before_values'].items()))
             )
-            values = map(fix_object, row['after_values'].values()+row['before_values'].values())
+            values = map(fix_object, list(row['after_values'].values())+list(row['before_values'].values()))
 
-    return {'template': template, 'values': values}
+    return {'template': template, 'values': list(values)}
+
+
+def print_rollback_sql(filename):
+    """print rollback sql from tmp_file"""
+    with open(filename, "rb") as f_tmp:
+        sleep_interval = 1000
+        i = 0
+        for line in reversed_lines(f_tmp):
+            print(line.rstrip())
+            if i >= sleep_interval:
+                print('SELECT SLEEP(1);')
+                i = 0
+            else:
+                i += 1
 
 
 def reversed_lines(fin):
     """Generate the lines of file in reverse order."""
     part = ''
     for block in reversed_blocks(fin):
+        if PY3PLUS:
+            block = block.decode("utf-8")
         for c in reversed(block):
             if c == '\n' and part:
                 yield part[::-1]

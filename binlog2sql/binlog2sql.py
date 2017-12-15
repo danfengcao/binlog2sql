@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import sys
 import datetime
 import pymysql
@@ -12,7 +11,8 @@ from pymysqlreplication.row_event import (
     DeleteRowsEvent,
 )
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, reversed_lines
+from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, \
+    temp_open, print_rollback_sql
 
 
 class Binlog2sql(object):
@@ -35,7 +35,7 @@ class Binlog2sql(object):
         if start_time:
             self.start_time = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
         else:
-            self.start_time = datetime.datetime.strptime('1970-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")
+            self.start_time = datetime.datetime.strptime('1980-01-01 00:00:00', "%Y-%m-%d %H:%M:%S")
         if stop_time:
             self.stop_time = datetime.datetime.strptime(stop_time, "%Y-%m-%d %H:%M:%S")
         else:
@@ -69,19 +69,21 @@ class Binlog2sql(object):
                                     log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
                                     only_tables=self.only_tables, resume_stream=True)
 
-        cursor = self.connection.cursor()
-        # to simplify code, we do not use flock for tmp_file.
-        tmp_file = create_unique_file('%s.%s' % (self.conn_setting['host'], self.conn_setting['port']))
-        f_tmp = open(tmp_file, "w")
         flag_last_event = False
         e_start_pos, last_pos = stream.log_pos, stream.log_pos
-        try:
+        # to simplify code, we do not use flock for tmp_file.
+        tmp_file = create_unique_file('%s.%s' % (self.conn_setting['host'], self.conn_setting['port']))
+        with temp_open(tmp_file, "w") as f_tmp, self.connection as cursor:
             for binlog_event in stream:
                 if not self.stop_never:
+                    try:
+                        event_time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
+                    except OSError:
+                        event_time = datetime.datetime(1980, 1, 1, 0, 0)
                     if (stream.log_file == self.end_file and stream.log_pos == self.end_pos) or \
                             (stream.log_file == self.eof_file and stream.log_pos == self.eof_pos):
                         flag_last_event = True
-                    elif datetime.datetime.fromtimestamp(binlog_event.timestamp) < self.start_time:
+                    elif event_time < self.start_time:
                         if not (isinstance(binlog_event, RotateEvent)
                                 or isinstance(binlog_event, FormatDescriptionEvent)):
                             last_pos = binlog_event.packet.log_pos
@@ -89,7 +91,7 @@ class Binlog2sql(object):
                     elif (stream.log_file not in self.binlogList) or \
                             (self.end_pos and stream.log_file == self.end_file and stream.log_pos > self.end_pos) or \
                             (stream.log_file == self.eof_file and stream.log_pos > self.eof_pos) or \
-                            (datetime.datetime.fromtimestamp(binlog_event.timestamp) >= self.stop_time):
+                            (event_time >= self.stop_time):
                         break
                     # else:
                     #     raise ValueError('unknown binlog file or position')
@@ -116,36 +118,18 @@ class Binlog2sql(object):
                     last_pos = binlog_event.packet.log_pos
                 if flag_last_event:
                     break
+
+            stream.close()
             f_tmp.close()
-
             if self.flashback:
-                self.print_rollback_sql(filename=tmp_file)
-        finally:
-            os.remove(tmp_file)
-        cursor.close()
-        stream.close()
+                print_rollback_sql(filename=tmp_file)
         return True
-
-    @staticmethod
-    def print_rollback_sql(filename):
-        """print rollback sql from tmp_file"""
-        with open(filename) as f_tmp:
-            sleep_interval = 1000
-            i = 0
-            for line in reversed_lines(f_tmp):
-                print(line.rstrip())
-                if i >= sleep_interval:
-                    print('SELECT SLEEP(1);')
-                    i = 0
-                else:
-                    i += 1
 
     def __del__(self):
         pass
 
 
 if __name__ == '__main__':
-
     args = command_line_args(sys.argv[1:])
     conn_setting = {'host': args.host, 'port': args.port, 'user': args.user, 'passwd': args.password, 'charset': 'utf8'}
     binlog2sql = Binlog2sql(connection_settings=conn_setting, start_file=args.start_file, start_pos=args.start_pos,
