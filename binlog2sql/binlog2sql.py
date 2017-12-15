@@ -11,15 +11,14 @@ from pymysqlreplication.row_event import (
     DeleteRowsEvent,
 )
 from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, \
-    temp_open, print_rollback_sql
+from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, reversed_lines
 
 
 class Binlog2sql(object):
 
     def __init__(self, connection_settings, start_file=None, start_pos=None, end_file=None, end_pos=None,
                  start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
-                 flashback=False, stop_never=False):
+                 flashback=False, stop_never=False, back_interval=1.0):
         """
         conn_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
         """
@@ -43,7 +42,7 @@ class Binlog2sql(object):
 
         self.only_schemas = only_schemas if only_schemas else None
         self.only_tables = only_tables if only_tables else None
-        self.no_pk, self.flashback, self.stop_never = (no_pk, flashback, stop_never)
+        self.no_pk, self.flashback, self.stop_never, self.back_interval = (no_pk, flashback, stop_never, back_interval)
 
         self.binlogList = []
         self.connection = pymysql.connect(**self.conn_setting)
@@ -122,8 +121,23 @@ class Binlog2sql(object):
             stream.close()
             f_tmp.close()
             if self.flashback:
-                print_rollback_sql(filename=tmp_file)
+                self.print_rollback_sql(filename=tmp_file)
         return True
+
+    def print_rollback_sql(self, filename):
+        """print rollback sql from tmp_file"""
+        with open(filename, "rb") as f_tmp:
+            batch_size = 1000
+            i = 0
+            for line in reversed_lines(f_tmp):
+                print(line.rstrip())
+                if i >= batch_size:
+                    i = 0
+                    if self.back_interval:
+                        print('SELECT SLEEP(%s);' % self.back_interval)
+                else:
+                    i += 1
+
 
     def __del__(self):
         pass
@@ -135,5 +149,6 @@ if __name__ == '__main__':
     binlog2sql = Binlog2sql(connection_settings=conn_setting, start_file=args.start_file, start_pos=args.start_pos,
                             end_file=args.end_file, end_pos=args.end_pos, start_time=args.start_time,
                             stop_time=args.stop_time, only_schemas=args.databases, only_tables=args.tables,
-                            no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never)
+                            no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
+                            back_interval=args.back_interval)
     binlog2sql.process_binlog()

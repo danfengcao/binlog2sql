@@ -92,11 +92,13 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 -K, --no-primary-key 对INSERT语句去除主键。可选。
 
--B, --flashback 生成回滚语句，可解析大文件，不受内存限制，每打印一千行加一句SELECT SLEEP(1)。可选。与stop-never或no-primary-key不能同时添加。
+-B, --flashback 生成回滚语句，可解析大文件，不受内存限制。可选。与stop-never或no-primary-key不能同时添加。
+
+--back-interval -B模式下，每打印一千行回滚语句，加一句SLEEP多少秒，如果不需要SLEEP，请设为0。可选。默认1.0。
 
 **解析范围控制**
 
---start-file 起始解析文件。必须。
+--start-file 起始解析文件，只需文件名，无需全路径 。必须。
 
 --start-position/--start-pos start-file的起始解析位置。可选。默认为start-file的起始位置。
 
@@ -113,6 +115,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 -d, --databases 只输出目标db的sql。可选。默认为空。
 
 -t, --tables 只输出目标tables的sql。可选。默认为空。
+
 
 ### 应用案例
 

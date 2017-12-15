@@ -78,14 +78,13 @@ def parse_args():
                                "shell to set it properly).", default='')
     interval.add_argument('--stop-datetime', dest='stop_time', type=str,
                           help="Stop reading the binlog at first event having a datetime equal or posterior "
-                               "to the argument; the argument must be a date and time in the local time zone,"
-                               " in any format accepted by the MySQL server for DATETIME and TIMESTAMP types,"
-                               " for example: 2004-12-25 11:25:56 (you should probably use quotes for your "
-                               "shell to set it properly).", default='')
+                               "to the argument;", default='')
     parser.add_argument('--stop-never', dest='stop_never', action='store_true',
-                        help="Wait for more data from the server. default: stop replicate at the last binlog"
-                             " when you start binlog2sql", default=False)
-
+                        help="Wait for more data from the server. default: stop replicate at the last binlog "
+                             "when you start binlog2sql", default=False)
+    parser.add_argument('--back-interval', dest='back_interval', type=float,
+                        help="Sleep time between chunks of 1000 rollback sql. If you do not need sleep between chunks, "
+                             " set it to 0", default=1.0)
     parser.add_argument('--help', dest='help', action='store_true', help='help information', default=False)
 
     schema = parser.add_argument_group('schema filter')
@@ -215,20 +214,6 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
             values = map(fix_object, list(row['after_values'].values())+list(row['before_values'].values()))
 
     return {'template': template, 'values': list(values)}
-
-
-def print_rollback_sql(filename):
-    """print rollback sql from tmp_file"""
-    with open(filename, "rb") as f_tmp:
-        sleep_interval = 1000
-        i = 0
-        for line in reversed_lines(f_tmp):
-            print(line.rstrip())
-            if i >= sleep_interval:
-                print('SELECT SLEEP(1);')
-                i = 0
-            else:
-                i += 1
 
 
 def reversed_lines(fin):
