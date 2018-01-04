@@ -13,7 +13,7 @@ binlog2sql
 
 项目状态
 ===
-正常维护。应用于大众点评线上环境。线上环境的操作，请在对MySQL**相当熟悉**的同学指导下进行
+正常维护。应用于部分公司线上环境。线上环境的操作，请在对MySQL**相当熟悉**的同学指导下进行
 
 * 已测试环境
     * Python 2.6, 2.7, 3.4
@@ -211,14 +211,14 @@ Empty set (0.00 sec)
 
 * 纯Python开发，安装与使用都很简单
 * 自带flashback、no-primary-key解析模式，无需再装补丁
-* flashback模式下，更适合闪回[实战](./example/mysql-flashback-priciple-and-practice.md)
+* flashback模式下，更适合[闪回实战](./example/mysql-flashback-priciple-and-practice.md)
 * 解析为标准SQL，方便理解、筛选
 * 代码容易改造，可以支持更多个性化解析
 
 ### 贡献者
 
 * danfengcao 作者，维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
-* 大众点评DBA团队 想法交流，使用体验 [dba_op@dianping.com](dba_op@dianping.com)
+* 大众点评DBA团队 想法交流，使用体验
 * 赵承勇 pymysqlreplication权限bug [https://github.com/imzcy1987](https://github.com/imzcy1987)
 * 陈路炳 bug报告(字段值为空时的处理)，使用体验 [https://github.com/bingluchen](https://github.com/bingluchen)
 
