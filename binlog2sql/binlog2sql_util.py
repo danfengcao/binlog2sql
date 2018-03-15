@@ -85,7 +85,7 @@ def parse_args():
                         help='tables you want to process', default='')
 
     event = parser.add_argument_group('type filter')
-    event.add_argument('--only-dml', dest='only_dml', action='store_true', default=True,
+    event.add_argument('--only-dml', dest='only_dml', action='store_true', default=False,
                        help='only print dml, ignore ddl')
     event.add_argument('--sql-type', dest='sql_type', type=str, nargs='*', default=['INSERT', 'UPDATE', 'DELETE'],
                        help='Sql type you want to process, support INSERT, UPDATE, DELETE.')
