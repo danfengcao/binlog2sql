@@ -130,6 +130,8 @@ def compare_items(items):
 
 def fix_object(value):
     """Fixes python objects so that they can be properly inserted into SQL queries"""
+    if isinstance(value, set):
+        value = ','.join(value)
     if PY3PLUS and isinstance(value, bytes):
         return value.decode('utf-8')
     elif not PY3PLUS and isinstance(value, unicode):

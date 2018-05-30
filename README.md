@@ -13,11 +13,11 @@ binlog2sql
 
 项目状态
 ===
-正常维护。应用于部分公司线上环境。线上环境的操作，请在对MySQL**相当熟悉**的同学指导下进行
+正常维护。应用于部分公司线上环境。
 
 * 已测试环境
-    * Python 2.6, 2.7, 3.4
-    * MySQL 5.6
+    * Python 2.7, 3.4+
+    * MySQL 5.6, 5.7
 
 
 安装
@@ -217,14 +217,16 @@ Empty set (0.00 sec)
 
 ### 贡献者
 
-* danfengcao 作者，维护者 [https://github.com/danfengcao](https://github.com/danfengcao)
+* [danfengcao](https://github.com/danfengcao) 作者，维护者 [https://github.com/danfengcao]
 * 大众点评DBA团队 想法交流，使用体验
-* 赵承勇 pymysqlreplication权限bug [https://github.com/imzcy1987](https://github.com/imzcy1987)
-* 陈路炳 bug报告(字段值为空时的处理)，使用体验 [https://github.com/bingluchen](https://github.com/bingluchen)
+* [赵承勇](https://github.com/imzcy1987) pymysqlreplication权限bug #2
+* [陈路炳](https://github.com/bingluchen) bug报告(字段值为空时的处理)，使用体验
+* [dba-jane](https://github.com/DBA-jane) pymysqlreplication时间字段浮点数bug #29
+* [lujinke](https://github.com/lujinke) bug报告(set字段的处理 #32)
 
 ### 联系我
 
-有任何问题，请与我联系。微信：danfeng053005 邮箱：[danfengcao.info@gmail.com](danfengcao.info@gmail.com)
+有任何问题，请与我联系。邮箱：[danfengcao.info@gmail.com](danfengcao.info@gmail.com)
 
 欢迎提问题提需求，欢迎pull requests！
 
