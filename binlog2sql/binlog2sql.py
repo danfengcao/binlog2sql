@@ -1,17 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os, sys
+
+BASEDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASEDIR)
+
 import sys
 import datetime
 import pymysql
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent
-from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, temp_open, \
-    reversed_lines, is_dml_event, event_type
+from pymysqlreplication.row_event import WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent
+from pymysqlreplication.event import QueryEvent, RotateEvent, FormatDescriptionEvent, XidEvent, GtidEvent
+from binlog2sql.binlog2sql_util import command_line_args, concat_sql_from_binlog_event, create_unique_file, \
+    temp_open, reversed_lines, is_dml_event, event_type
 
 
 class Binlog2sql(object):
-
     def __init__(self, connection_settings, start_file=None, start_pos=None, end_file=None, end_pos=None,
                  start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
                  flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None):
@@ -24,7 +29,7 @@ class Binlog2sql(object):
 
         self.conn_setting = connection_settings
         self.start_file = start_file
-        self.start_pos = start_pos if start_pos else 4    # use binlog v4
+        self.start_pos = start_pos if start_pos else 4  # use binlog v4
         self.end_file = end_file if end_file else start_file
         self.end_pos = end_pos
         if start_time:
@@ -60,6 +65,12 @@ class Binlog2sql(object):
             self.server_id = cursor.fetchone()[0]
             if not self.server_id:
                 raise ValueError('missing server_id in %s:%s' % (self.conn_setting['host'], self.conn_setting['port']))
+        self.to_db_sql = "insert into t_binlog_to_sql(gtid_timestamp, gtid_start_pos, gtid_end_pos, gtid_info, " \
+                         "sql_timestamp, sql_start_pos, sql_end_pos, origin_sql, rollback_sql, " \
+                         "xid_timestamp, xid_start_pos, xid_end_pos, xid_info) values('{}', '{}', '{}', '{}', '{}', " \
+                         "'{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}')"
+        self.new_sql_flag = False
+        self.res_list = []
 
     def process_binlog(self):
         stream = BinLogStreamReader(connection_settings=self.conn_setting, server_id=self.server_id,
@@ -67,11 +78,14 @@ class Binlog2sql(object):
                                     only_tables=self.only_tables, resume_stream=True)
 
         flag_last_event = False
+        res = {'event_type': '', 'values': []}
         e_start_pos, last_pos = stream.log_pos, stream.log_pos
         # to simplify code, we do not use flock for tmp_file.
         tmp_file = create_unique_file('%s.%s' % (self.conn_setting['host'], self.conn_setting['port']))
         with temp_open(tmp_file, "w") as f_tmp, self.connection as cursor:
             for binlog_event in stream:
+                if self.new_sql_flag:
+                    self.res_list = []
                 if not self.stop_never:
                     try:
                         event_time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
@@ -83,6 +97,7 @@ class Binlog2sql(object):
                     elif event_time < self.start_time:
                         if not (isinstance(binlog_event, RotateEvent)
                                 or isinstance(binlog_event, FormatDescriptionEvent)):
+                            # if isinstance(binlog_event, XidEvent):
                             last_pos = binlog_event.packet.log_pos
                         continue
                     elif (stream.log_file not in self.binlogList) or \
@@ -90,25 +105,47 @@ class Binlog2sql(object):
                             (stream.log_file == self.eof_file and stream.log_pos > self.eof_pos) or \
                             (event_time >= self.stop_time):
                         break
-                    # else:
-                    #     raise ValueError('unknown binlog file or position')
+                        # else:
+                        #     raise ValueError('unknown binlog file or position')
 
-                if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
+                # if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
+                if isinstance(binlog_event, QueryEvent) or isinstance(binlog_event, XidEvent) \
+                        or isinstance(binlog_event, GtidEvent):
                     e_start_pos = last_pos
 
                 if isinstance(binlog_event, QueryEvent) and not self.only_dml:
-                    sql = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event,
+                    # DDL是QueryEvent, 这里解析DDL, 打印
+                    res = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event,
                                                        flashback=self.flashback, no_pk=self.no_pk)
-                    if sql:
-                        print(sql)
+                    self.res_list += res['values']
+
                 elif is_dml_event(binlog_event) and event_type(binlog_event) in self.sql_type:
-                    for row in binlog_event.rows:
-                        sql = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event, no_pk=self.no_pk,
-                                                           row=row, flashback=self.flashback, e_start_pos=e_start_pos)
-                        if self.flashback:
-                            f_tmp.write(sql + '\n')
-                        else:
-                            print(sql)
+                    # 解析DML, 且在sql_type中的, 只包含INSERT, UPDATE, DELETE, 打印
+                    if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
+                            or isinstance(binlog_event, DeleteRowsEvent):
+                        for row in binlog_event.rows:
+                            res = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event,
+                                                               no_pk=self.no_pk,
+                                                               row=row, flashback=self.flashback,
+                                                               e_start_pos=e_start_pos)
+                            if self.res_list[-1].endswith('/* mfw_super_flag */'):
+                                self.res_list += [self.res_list.pop() + x for x in res['values'][-2::][::-1]][::-1]
+                            else:
+                                self.res_list += res['values']
+                    else:
+                        res = concat_sql_from_binlog_event(cursor=cursor, binlog_event=binlog_event, no_pk=self.no_pk,
+                                                           flashback=self.flashback, e_start_pos=e_start_pos)
+
+                        self.res_list += res['values']
+
+                if res['event_type'] == 'XID' or res['event_type'] == 'DDL':
+                    self.new_sql_flag = True
+                    if len(self.res_list) == 13:
+                        print(self.res_list)
+
+                else:
+                    self.new_sql_flag = False
+
 
                 if not (isinstance(binlog_event, RotateEvent) or isinstance(binlog_event, FormatDescriptionEvent)):
                     last_pos = binlog_event.packet.log_pos
@@ -118,6 +155,7 @@ class Binlog2sql(object):
             stream.close()
             f_tmp.close()
             if self.flashback:
+                # 再根据临时文件, 生成逆向sql
                 self.print_rollback_sql(filename=tmp_file)
         return True
 
@@ -148,3 +186,4 @@ if __name__ == '__main__':
                             no_pk=args.no_pk, flashback=args.flashback, stop_never=args.stop_never,
                             back_interval=args.back_interval, only_dml=args.only_dml, sql_type=args.sql_type)
     binlog2sql.process_binlog()
+
