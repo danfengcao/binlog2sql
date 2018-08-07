@@ -6,12 +6,9 @@ import sys
 import argparse
 import datetime
 from contextlib import contextmanager
-from pymysqlreplication.row_event import (
-    WriteRowsEvent,
-    UpdateRowsEvent,
-    DeleteRowsEvent,
-)
-from pymysqlreplication.event import QueryEvent
+from pymysqlreplication.row_event import WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent
+from pymysqlreplication.event import GtidEvent, XidEvent, QueryEvent
+
 
 if sys.version > '3':
     PY3PLUS = True
@@ -87,7 +84,7 @@ def parse_args():
     event = parser.add_argument_group('type filter')
     event.add_argument('--only-dml', dest='only_dml', action='store_true', default=False,
                        help='only print dml, ignore ddl')
-    event.add_argument('--sql-type', dest='sql_type', type=str, nargs='*', default=['INSERT', 'UPDATE', 'DELETE'],
+    event.add_argument('--sql-type', dest='sql_type', type=str, nargs='*', default=['INSERT', 'UPDATE', 'DELETE', 'XID', 'GTID'],
                        help='Sql type you want to process, support INSERT, UPDATE, DELETE.')
 
     # exclusive = parser.add_mutually_exclusive_group()
@@ -141,7 +138,8 @@ def fix_object(value):
 
 
 def is_dml_event(event):
-    if isinstance(event, WriteRowsEvent) or isinstance(event, UpdateRowsEvent) or isinstance(event, DeleteRowsEvent):
+    if isinstance(event, WriteRowsEvent) or isinstance(event, UpdateRowsEvent) or isinstance(event, DeleteRowsEvent) \
+            or isinstance(event, XidEvent) or isinstance(event, GtidEvent):
         return True
     else:
         return False
@@ -155,31 +153,52 @@ def event_type(event):
         t = 'UPDATE'
     elif isinstance(event, DeleteRowsEvent):
         t = 'DELETE'
+    elif isinstance(event, XidEvent):
+        t = 'XID'
+    elif isinstance(event, GtidEvent):
+        t = 'GTID'
     return t
 
 
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
+    res = { 'event_type': '', 'values': [] }
+
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
-    if not (isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent)
-            or isinstance(binlog_event, DeleteRowsEvent) or isinstance(binlog_event, QueryEvent)):
-        raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
     sql = ''
-    if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
-            or isinstance(binlog_event, DeleteRowsEvent):
+    if isinstance(binlog_event, GtidEvent):
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
-        sql = cursor.mogrify(pattern['template'], pattern['values'])
-        time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
-        sql += ' #start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
+        gtid_start_pos = e_start_pos
+        gtid_end_pos = binlog_event.packet.log_pos
+        gtid_timestamp = pattern['values'][0]
+        gtid_info = pattern['values'][1]
+        res = { 'event_type': 'GTID', 'values': [gtid_timestamp, str(gtid_start_pos), str(gtid_end_pos), gtid_info] }
+    elif isinstance(binlog_event, XidEvent):
+        pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
+        xid_start_pos = e_start_pos
+        xid_end_pos = binlog_event.packet.log_pos
+        xid_timestamp = pattern['values'][0]
+        xid_info = pattern['values'][1]
+        res = { 'event_type': 'XID', 'values': [xid_timestamp, str(xid_start_pos), str(xid_end_pos), xid_info] }
+    elif isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
+            or isinstance(binlog_event, DeleteRowsEvent):
+        pattern = generate_sql_pattern(binlog_event, row=row, flashback=False, no_pk=no_pk)
+        sql = cursor.mogrify(pattern['template'], pattern['values']) + '/* mfw_super_flag */'
+        time = datetime.datetime.fromtimestamp(binlog_event.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+        rollback_pattern = generate_sql_pattern(binlog_event, row=row, flashback=True, no_pk=no_pk)
+        rollback_sql = cursor.mogrify(rollback_pattern['template'], rollback_pattern['values']) + '/* mfw_super_flag */'
+
+        res = { 'event_type': 'DML', 'values': [time, str(e_start_pos), str(binlog_event.packet.log_pos), sql, rollback_sql] }
     elif flashback is False and isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
-            and binlog_event.query != 'COMMIT':
+            and binlog_event.query != 'COMMIT': #开了flashback, 就不解析ddl了, 因为没法解析返修ddl
         if binlog_event.schema:
             sql = 'USE {0};\n'.format(binlog_event.schema)
         sql += '{0};'.format(fix_object(binlog_event.query))
+        res = { 'event_type': 'DDL', 'values': [ '', '' ,'', sql, '', '' ,'' ,'' ,''] }
 
-    return sql
-
+    return res
 
 def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
     template = ''
@@ -207,10 +226,6 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
     else:
         if isinstance(binlog_event, WriteRowsEvent):
             if no_pk:
-                # print binlog_event.__dict__
-                # tableInfo = (binlog_event.table_map)[binlog_event.table_id]
-                # if tableInfo.primary_key:
-                #     row['values'].pop(tableInfo.primary_key)
                 if binlog_event.primary_key:
                     row['values'].pop(binlog_event.primary_key)
 
@@ -231,6 +246,15 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
                 ' AND '.join(map(compare_items, row['before_values'].items()))
             )
             values = map(fix_object, list(row['after_values'].values())+list(row['before_values'].values()))
+
+    if isinstance(binlog_event, GtidEvent):
+        template = 'SELECT %s, %s'
+        values = [datetime.datetime.fromtimestamp(binlog_event.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+              binlog_event.gtid]
+    elif isinstance(binlog_event, XidEvent):
+        template = 'SELECT %s, %s'
+        values = [datetime.datetime.fromtimestamp(binlog_event.timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+              binlog_event.xid]
 
     return {'template': template, 'values': list(values)}
 
@@ -259,3 +283,4 @@ def reversed_blocks(fin, block_size=4096):
         here -= delta
         fin.seek(here, os.SEEK_SET)
         yield fin.read(delta)
+
