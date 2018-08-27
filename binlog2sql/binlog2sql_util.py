@@ -5,13 +5,15 @@ import os
 import sys
 import argparse
 import datetime
+import getpass
 from contextlib import contextmanager
+from pymysqlreplication.event import QueryEvent
 from pymysqlreplication.row_event import (
     WriteRowsEvent,
     UpdateRowsEvent,
     DeleteRowsEvent,
 )
-from pymysqlreplication.event import QueryEvent
+
 
 if sys.version > '3':
     PY3PLUS = True
@@ -58,7 +60,7 @@ def parse_args():
                                  help='Host the MySQL database server located', default='127.0.0.1')
     connect_setting.add_argument('-u', '--user', dest='user', type=str,
                                  help='MySQL Username to log in as', default='root')
-    connect_setting.add_argument('-p', '--password', dest='password', type=str,
+    connect_setting.add_argument('-p', '--password', dest='password', type=str, nargs='*',
                                  help='MySQL Password to use', default='')
     connect_setting.add_argument('-P', '--port', dest='port', type=int,
                                  help='MySQL port to use', default=3306)
@@ -116,6 +118,10 @@ def command_line_args(args):
     if (args.start_time and not is_valid_datetime(args.start_time)) or \
             (args.stop_time and not is_valid_datetime(args.stop_time)):
         raise ValueError('Incorrect datetime argument')
+    if not args.password:
+        args.password = getpass.getpass()
+    else:
+        args.password = args.password[0]
     return args
 
 
