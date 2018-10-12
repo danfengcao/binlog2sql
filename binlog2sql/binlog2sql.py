@@ -64,7 +64,7 @@ class Binlog2sql(object):
     def process_binlog(self):
         stream = BinLogStreamReader(connection_settings=self.conn_setting, server_id=self.server_id,
                                     log_file=self.start_file, log_pos=self.start_pos, only_schemas=self.only_schemas,
-                                    only_tables=self.only_tables, resume_stream=True)
+                                    only_tables=self.only_tables, resume_stream=True, blocking=True)
 
         flag_last_event = False
         e_start_pos, last_pos = stream.log_pos, stream.log_pos

@@ -88,7 +88,7 @@ UPDATE `test`.`test3` SET `addtime`='2016-12-10 13:03:22', `data`='中文', `id`
 
 **解析模式**
 
---stop-never 持续解析binlog。可选。，默认False，同步至执行命令时最新的binlog位置。
+--stop-never 持续解析binlog。可选。默认False，同步至执行命令时最新的binlog位置。
 
 -K, --no-primary-key 对INSERT语句去除主键。可选。默认False
 
