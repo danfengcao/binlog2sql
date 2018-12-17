@@ -164,6 +164,14 @@ def event_type(event):
     return t
 
 
+def remove_dropped_col(row):
+    for values in ['before_values', 'after_values', 'values']:
+        if values in row:
+            for col in list(row[values].keys()):
+                if col.startswith('__dropped_col_'):
+                    del row[values][col]
+
+
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
@@ -174,6 +182,8 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
     sql = ''
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
+        print(sql)
+        remove_dropped_col(row)
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
         time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
