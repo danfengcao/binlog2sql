@@ -97,7 +97,7 @@ def parse_args():
                         help='Generate insert sql without primary key if exists', default=False)
     parser.add_argument('-B', '--flashback', dest='flashback', action='store_true',
                         help='Flashback data to start_position of start_file', default=False)
-    parser.add_argument('--back-interval', dest='back_interval', type=float, default=1.0,
+    parser.add_argument('--back-interval', dest='back_interval', type=float, default=0.1,
                         help="Sleep time between chunks of 1000 rollback sql. set it to 0 if do not need sleep")
     return parser
 
@@ -165,11 +165,13 @@ def event_type(event):
 
 
 def remove_dropped_col(row):
+    """delete invalid hidden column for aliyun RDS"""
     for values in ['before_values', 'after_values', 'values']:
-        if values in row:
-            for col in list(row[values].keys()):
-                if col.startswith('__dropped_col_'):
-                    del row[values][col]
+        if values not in row:
+            continue
+        for col in list(row[values].keys()):
+            if col.startswith('__dropped_col_'):
+                del row[values][col]
 
 
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
@@ -182,14 +184,13 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
     sql = ''
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
-        print(sql)
         remove_dropped_col(row)
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
         time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
         sql += ' #start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
-    elif flashback is False and isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
-            and binlog_event.query != 'COMMIT':
+    elif isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
+            and binlog_event.query != 'COMMIT' and not flashback:
         if binlog_event.schema:
             sql = 'USE {0};\n'.format(binlog_event.schema)
         sql += '{0};'.format(fix_object(binlog_event.query))
@@ -200,7 +201,7 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
 def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
     template = ''
     values = []
-    if flashback is True:
+    if flashback:
         if isinstance(binlog_event, WriteRowsEvent):
             template = 'DELETE FROM `{0}`.`{1}` WHERE {2} LIMIT 1;'.format(
                 binlog_event.schema, binlog_event.table,
@@ -223,10 +224,6 @@ def generate_sql_pattern(binlog_event, row=None, flashback=False, no_pk=False):
     else:
         if isinstance(binlog_event, WriteRowsEvent):
             if no_pk:
-                # print binlog_event.__dict__
-                # tableInfo = (binlog_event.table_map)[binlog_event.table_id]
-                # if tableInfo.primary_key:
-                #     row['values'].pop(tableInfo.primary_key)
                 if binlog_event.primary_key:
                     row['values'].pop(binlog_event.primary_key)
 

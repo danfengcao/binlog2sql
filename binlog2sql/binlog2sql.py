@@ -12,9 +12,9 @@ from binlog2sql_util import command_line_args, concat_sql_from_binlog_event, cre
 
 class Binlog2sql(object):
 
-    def __init__(self, connection_settings, start_file=None, start_pos=None, end_file=None, end_pos=None,
-                 start_time=None, stop_time=None, only_schemas=None, only_tables=None, no_pk=False,
-                 flashback=False, stop_never=False, back_interval=1.0, only_dml=True, sql_type=None):
+    def __init__(self, connection_settings, start_file, start_pos, end_file, end_pos, start_time, stop_time,
+                 only_schemas, only_tables, sql_type, no_pk=False, flashback=False, stop_never=False,
+                 only_dml=True, back_interval=0.1):
         """
         conn_setting: {'host': 127.0.0.1, 'port': 3306, 'user': user, 'passwd': passwd, 'charset': 'utf8'}
         """
