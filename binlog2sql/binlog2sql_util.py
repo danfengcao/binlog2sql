@@ -154,7 +154,7 @@ def is_dml_event(event):
 
 
 def event_type(event):
-    t = None
+    t = 'UNKOWN'
     if isinstance(event, WriteRowsEvent):
         t = 'INSERT'
     elif isinstance(event, UpdateRowsEvent):
