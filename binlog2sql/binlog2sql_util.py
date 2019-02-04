@@ -147,10 +147,9 @@ def fix_object(value):
 
 
 def is_dml_event(event):
-    if isinstance(event, WriteRowsEvent) or isinstance(event, UpdateRowsEvent) or isinstance(event, DeleteRowsEvent):
+    if event_type(event) in ['INSERT', 'UPDATE', 'DELETE']:
         return True
-    else:
-        return False
+    return False
 
 
 def event_type(event):
@@ -177,13 +176,11 @@ def remove_dropped_col(row):
 def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
-    if not (isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent)
-            or isinstance(binlog_event, DeleteRowsEvent) or isinstance(binlog_event, QueryEvent)):
-        raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
+    if not (is_dml_event(binlog_event) or isinstance(binlog_event, QueryEvent)):
+        raise ValueError('binlog_event must be dml_event or QueryEvent')
 
     sql = ''
-    if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
-            or isinstance(binlog_event, DeleteRowsEvent):
+    if is_dml_event(binlog_event):
         remove_dropped_col(row)
         pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
         sql = cursor.mogrify(pattern['template'], pattern['values'])
