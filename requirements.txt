@@ -1,3 +1,4 @@
-PyMySQL==0.7.11
+PyMySQL==0.9.3
 wheel==0.29.0
-mysql-replication==0.13
+mysql-replication==0.21
+# 0.21 not supported PyMySQL 0.10.0 yet.

@@ -52,7 +52,10 @@ class TestBinlog2sqlUtil(unittest.TestCase):
 
     def test_fix_object(self):
         self.assertEqual(fix_object('ascii'), 'ascii')
-        self.assertEqual(fix_object(u'unicode'), u'unicode'.encode('utf-8'))
+        if not PY3PLUS:
+            self.assertEqual(fix_object(u'unicode'), u'unicode'.encode('utf-8'))
+        else:
+            self.assertEqual(fix_object(b'unicode'), u'unicode')
 
     def test_generate_sql_pattern(self):
         row = {'values': {'data': 'hello', 'id': 1}}
