@@ -13,7 +13,7 @@ from pymysqlreplication.row_event import (
     UpdateRowsEvent,
     DeleteRowsEvent,
 )
-
+BEGIN_QUERY_EVENT = None
 
 if sys.version > '3':
     PY3PLUS = True
@@ -65,6 +65,7 @@ def parse_args():
     connect_setting.add_argument('-P', '--port', dest='port', type=int,
                                  help='MySQL port to use', default=3306)
     interval = parser.add_argument_group('interval filter')
+    interval.add_argument('--thread-id', dest='thread_id', type=int, help='binlog event thread_id', default=0)
     interval.add_argument('--start-file', dest='start_file', type=str, help='Start binlog file to be parsed')
     interval.add_argument('--start-position', '--start-pos', dest='start_pos', type=int,
                           help='Start position of the --start-file', default=4)
@@ -164,7 +165,8 @@ def event_type(event):
     return t
 
 
-def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None, flashback=False, no_pk=False):
+def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=None,
+                                 flashback=False, no_pk=False, thread_id=0):
     if flashback and no_pk:
         raise ValueError('only one of flashback or no_pk can be True')
     if not (isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent)
@@ -172,12 +174,17 @@ def concat_sql_from_binlog_event(cursor, binlog_event, row=None, e_start_pos=Non
         raise ValueError('binlog_event must be WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent or QueryEvent')
 
     sql = ''
+    global BEGIN_QUERY_EVENT
+    if isinstance(binlog_event, QueryEvent) and binlog_event.query == 'BEGIN':
+        BEGIN_QUERY_EVENT = binlog_event
     if isinstance(binlog_event, WriteRowsEvent) or isinstance(binlog_event, UpdateRowsEvent) \
             or isinstance(binlog_event, DeleteRowsEvent):
-        pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
-        sql = cursor.mogrify(pattern['template'], pattern['values'])
-        time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
-        sql += ' #start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
+        # Support filter by the thread_id
+        if (thread_id == 0) or (thread_id and BEGIN_QUERY_EVENT.slave_proxy_id == thread_id):
+            pattern = generate_sql_pattern(binlog_event, row=row, flashback=flashback, no_pk=no_pk)
+            sql = cursor.mogrify(pattern['template'], pattern['values'])
+            time = datetime.datetime.fromtimestamp(binlog_event.timestamp)
+            sql += ' #start %s end %s time %s' % (e_start_pos, binlog_event.packet.log_pos, time)
     elif flashback is False and isinstance(binlog_event, QueryEvent) and binlog_event.query != 'BEGIN' \
             and binlog_event.query != 'COMMIT':
         if binlog_event.schema:
