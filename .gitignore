@@ -72,8 +72,8 @@ target/
 # IPython Notebook
 .ipynb_checkpoints
 
-# pyenv
-.python-version
+# pyenv ; we commented in for Meetup purposes
+#.python-version
 
 # celery beat schedule file
 celerybeat-schedule
