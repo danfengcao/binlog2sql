@@ -90,3 +90,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# filter out large sql files pulled down
+PROD.mysql-bin-changelog.*.sql
